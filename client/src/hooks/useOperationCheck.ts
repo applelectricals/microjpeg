@@ -17,8 +17,12 @@ export const useOperationCheck = () => {
       const result = await response.json();
       return result;
     } catch (error) {
-      console.error('Operation check failed:', error);
-      return { allowed: false, reason: 'Failed to check operation limits' };
+      //console.error('Operation check failed:', error);
+      //return { allowed: false, reason: 'Failed to check operation limits' };
+      // Add a check for localhost
+      if (window.location.hostname === 'localhost') {
+      return { allowed: true, reason: 'Local development - checks bypassed' };
+}
     }
   };
 

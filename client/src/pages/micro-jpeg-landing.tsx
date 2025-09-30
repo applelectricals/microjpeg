@@ -795,7 +795,7 @@ export default function MicroJPEGLanding() {
         setProcessingProgress(Math.floor(currentProgress));
       }, Math.max(estimatedDuration / 20, 200)); // Update every 200ms minimum
 
-      const response = await fetch('/api/compress', {
+      const response = await fetch('http://localhost:3001/api/compress', {
         method: 'POST',
         body: formData,
       });
@@ -1055,7 +1055,7 @@ export default function MicroJPEGLanding() {
       setProcessingProgress(20);
       setProcessingStatus(`Processing ${format.toUpperCase()}...`);
 
-      const response = await fetch('/api/compress', {
+      const response = await fetch('http:/api/compress', {
         method: 'POST',
         body: formData,
       });
