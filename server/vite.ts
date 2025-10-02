@@ -73,12 +73,18 @@ export function serveStatic(app: Express) {
   // Serve static files
   app.use(express.static(distPath));
   
-  // SPA fallback - but ONLY for non-API routes
-  app.use('*', (req, res, next) => {
-    // Don't catch API routes
-    if (req.path.startsWith('/api')) {
+  // SPA fallback - ONLY for GET requests to non-API, non-file routes
+  app.get('*', (req, res, next) => {
+    // Skip API routes entirely
+    if (req.path.startsWith('/api/')) {
       return next();
     }
+    
+    // Skip files with extensions (already handled by express.static)
+    if (path.extname(req.path)) {
+      return next();
+    }
+    
     res.sendFile(path.join(distPath, 'index.html'));
   });
 }
