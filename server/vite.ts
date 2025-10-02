@@ -68,13 +68,20 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  const distPath = path.resolve(import.meta.dirname, "public");
-
-  if (!fs.existsSync(distPath)) {
-    throw new Error(
-      `Could not find the build directory: ${distPath}, make sure to build the client first`,
-    );
-  }
+  const distPath = path.resolve(__dirname, '../dist/public');
+  
+  // Serve static files
+  app.use(express.static(distPath));
+  
+  // SPA fallback - but ONLY for non-API routes
+  app.use('*', (req, res, next) => {
+    // Don't catch API routes
+    if (req.path.startsWith('/api')) {
+      return next();
+    }
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
 
   app.use(express.static(distPath));
 
