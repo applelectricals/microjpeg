@@ -4,7 +4,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { TestPremiumExpiryManager } from "./testPremiumExpiry";
 import { initializeQueueService, shutdownQueueService } from "./queueService";
-import { seedSuperuser } from "./superuser";
+//import { seedSuperuser } from "./superuser";
 
 const app = express();
 app.set('etag', false); // Disable ETags to prevent 304 responses
