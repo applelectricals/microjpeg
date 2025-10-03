@@ -512,6 +512,10 @@ async function ensureDirectories() {
 
 export async function registerRoutes(app: Express): Promise<Server> {
  
+  // Test route - should ALWAYS work
+  app.get('/api/test', (req, res) => {
+    res.json({ message: 'API is working!' });
+  });
   
   await ensureDirectories();
   
