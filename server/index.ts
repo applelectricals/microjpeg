@@ -100,7 +100,15 @@ app.use((req, res, next) => {
   });
 
   const server = await registerRoutes(app);
-
+  
+  // Debug: Log all registered routes
+  console.log('🔍 Registered routes:');
+  app._router.stack.forEach((r: any) => {
+  if (r.route && r.route.path) {
+    console.log(`  ${Object.keys(r.route.methods).join(', ').toUpperCase()} ${r.route.path}`);
+  }
+  });
+  
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
