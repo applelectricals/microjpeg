@@ -2105,7 +2105,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ✅ UNIFIED PAGE-AWARE USAGE STATS API
-  app.get('/api/usage-stats/:pageIdentifier', async (req, res) => {
+  app.get('/api/usage-stats/:pageIdentifier?', async (req, res) => {
     try {
       console.log(`🔧 UNIFIED USAGE STATS: pageIdentifier=${req.params.pageIdentifier}`);
       const { pageIdentifier } = req.params;
