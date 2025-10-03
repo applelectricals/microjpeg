@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
-const currentDir = dirname(fileURLToPath(import.meta.url));
+
 
 import express, { type Express } from "express";
 import fs from "fs";
@@ -73,7 +73,7 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  const distPath = path.resolve(__dirname, '../dist/public');
+  const distPath = path.resolve(process.cwd(), 'dist/public');
   
   // Serve static files
   app.use(express.static(distPath));
