@@ -49,17 +49,22 @@ class EmailService {
   constructor() {
     // Load the Micro JPEG logo
     try {
-      const logoPath = path.join(process.cwd(), 'attached_assets', 'MICROJPEG_LOGO_1756492872982.png');
-      this.logoAttachment = {
-        content: fs.readFileSync(logoPath).toString('base64'),
-        filename: 'microjpeg-logo.png',
-        type: 'image/png',
-        disposition: 'inline',
-        content_id: 'microjpeg-logo'
-      };
-    } catch (error) {
-      console.warn('Could not load Micro JPEG logo for emails:', error);
-    }
+  const logoPath = path.join(__dirname, '../attached_assets/MICROJPEG_LOGO_1756492872982.png');
+  const logoBuffer = fs.readFileSync(logoPath);
+  console.log('✅ Loaded Micro JPEG logo for emails');
+  
+  this.logoAttachment = {
+    content: logoBuffer.toString('base64'),
+    filename: 'microjpeg-logo.png',
+    type: 'image/png',
+    disposition: 'inline',
+    content_id: 'microjpeg-logo'
+  };
+} catch (error) {
+  console.warn('⚠️ Could not load email logo, emails will be sent without logo:', error.message);
+  this.logoAttachment = null; // No logo attachment
+}
+   
 
     if (process.env.SENDGRID_API_KEY) {
       this.mailService = new MailService();

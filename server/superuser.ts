@@ -14,7 +14,7 @@ const ADMIN_SEED_TOKEN = process.env.ADMIN_SEED_TOKEN || "dev-seed-token-2025";
 // Seed superuser on startup if it doesn't exist
 export async function seedSuperuser(): Promise<void> {
   try {
-    // Check if superuser already exists
+    // Check if superuser exists
     const [existingSuperuser] = await db
       .select()
       .from(users)
@@ -29,26 +29,33 @@ export async function seedSuperuser(): Promise<void> {
     // Hash password
     const hashedPassword = await bcrypt.hash(SUPERUSER_PASSWORD, 12);
 
-    // Create superuser
-    const [newSuperuser] = await db
-      .insert(users)
-      .values({
-        email: SUPERUSER_EMAIL,
-        password: hashedPassword,
-        firstName: "Super",
-        lastName: "Admin",
-        isSuperuser: true,
-        isEmailVerified: "true",
-        subscriptionTier: "enterprise",
-        subscriptionStatus: "active",
-        adminNotes: "System superuser - created automatically",
-      })
-      .returning();
+    // Create superuser with nested try-catch
+    let newSuperuser;
+    try {
+      [newSuperuser] = await db
+        .insert(users)
+        .values({
+          email: SUPERUSER_EMAIL,
+          password: hashedPassword,
+          //firstName: "Super",
+          //lastName: "Admin",
+          //isSuperuser: true,
+          //isEmailVerified: true,
+          //subscriptionTier: "enterprise",
+          //subscriptionStatus: "active",
+          //adminNotes: "System superuser - created automatically",
+        })
+        .returning();
+    } catch (insertError) {
+      console.error("SQL INSERT ERROR:", insertError);
+      throw insertError;
+    }
 
     console.log("✅ Superuser created successfully");
     console.log(`📧 Email: ${SUPERUSER_EMAIL}`);
     console.log(`🔑 Password: ${SUPERUSER_PASSWORD}`);
     console.log("⚠️  Change default credentials in production!");
+
 
     // Log audit entry
     await logAdminAction(
@@ -188,15 +195,28 @@ export async function updateAppSettings(
     };
 
     // Update database
-    await db
-      .update(appSettings)
-      .set({
-        countersEnforcement: newEnforcement,
-        adminUiEnabled: updates.adminUiEnabled ?? currentSettings.adminUiEnabled,
-        superuserBypassEnabled: updates.superuserBypassEnabled ?? currentSettings.superuserBypassEnabled,
-        updatedAt: new Date(),
-        updatedBy,
-      });
+    const [existingSettings] = await db.select().from(appSettings).limit(1);
+
+if (existingSettings) {
+  await db
+    .update(appSettings)
+    .set({
+      countersEnforcement: newEnforcement,
+      adminUiEnabled: updates.adminUiEnabled ?? currentSettings.adminUiEnabled,
+      superuserBypassEnabled: updates.superuserBypassEnabled ?? currentSettings.superuserBypassEnabled,
+      updatedAt: new Date(),
+      updatedBy,
+    })
+    .where(eq(appSettings.id, existingSettings.id));
+} else {
+  // Insert if doesn't exist
+  await db.insert(appSettings).values({
+    countersEnforcement: newEnforcement,
+    adminUiEnabled: updates.adminUiEnabled ?? currentSettings.adminUiEnabled,
+    superuserBypassEnabled: updates.superuserBypassEnabled ?? currentSettings.superuserBypassEnabled,
+    updatedBy,
+  });
+}
 
     // Clear cache
     cachedAppSettings = null;
