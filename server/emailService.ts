@@ -41,8 +41,7 @@ interface PaymentDetails {
   credits?: number; // Added for credit purchase confirmations
 }
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const currentDir = dirname(fileURLToPath(import.meta.url));
 
 class EmailService {
   private mailService: MailService | null = null;
@@ -54,7 +53,7 @@ class EmailService {
   constructor() {
     // Load the Micro JPEG logo
     try {
-  const logoPath = path.join(__dirname, '../attached_assets/MICROJPEG_LOGO_1756492872982.png');
+  const logoPath = path.join(dirname(fileURLToPath(import.meta.url)), '../attached_assets/MICROJPEG_LOGO_1756492872982.png');
   const logoBuffer = fs.readFileSync(logoPath);
   console.log('✅ Loaded Micro JPEG logo for emails');
   
