@@ -1,0 +1,32 @@
+name: Deploy to Hetzner
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Build and push Docker image
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+        run: |
+          echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
+          docker build -t applelectricals/microjpeg:latest .
+          docker push applelectricals/microjpeg:latest
+      
+      - name: Deploy to Hetzner
+        uses: appleboy/ssh-action@master
+        with:
+          host: 5.78.130.230
+          username: root
+          password: ${{ secrets.HETZNER_PASSWORD }}
+          script: |
+            docker pull applelectricals/microjpeg:latest
+            docker stop microjpeg-app 2>/dev/null || true
+            docker rm microjpeg-app 2>/dev/null || true
+            docker run -d --name microjpeg-app --network coolify --restart unless-stopped --env-file /opt/microjpeg/.env -l "traefik.enable=true" -l "traefik.http.routers.microjpeg.rule=Host(\`hsksc4cs80s8kko8cg40cook.5.78.130.230.sslip.io\`)" -l "traefik.http.routers.microjpeg.entrypoints=http" -l "traefik.http.services.microjpeg.loadbalancer.server.port=3000" applelectricals/microjpeg:latest
