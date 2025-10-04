@@ -16,7 +16,7 @@ jobs:
           DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
         run: |
           echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
-          docker build -t applelectricals/microjpeg:latest .
+          docker build --no-cache -t applelectricals/microjpeg:latest .
           docker push applelectricals/microjpeg:latest
       
       - name: Deploy to Hetzner
