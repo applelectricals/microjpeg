@@ -73,7 +73,7 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  const distPath = path.resolve(process.cwd(), 'dist/public');
+  const distPath = path.resolve(process.cwd(), 'dist');
   
   // Serve static files
   app.use(express.static(distPath));
