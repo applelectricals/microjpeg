@@ -1,10 +1,10 @@
 import './polyfill';
-import 'dotenv/config'; // Only import once
+import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
 import session from 'express-session';
 import cors from 'cors';
 import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
+import { serveStatic, log } from "./viteStatic";
 import { TestPremiumExpiryManager } from "./testPremiumExpiry";
 import { initializeQueueService, shutdownQueueService } from "./queueService";
 
@@ -124,7 +124,14 @@ app.use((req, res, next) => {
 
   const server = await registerRoutes(app);
 
-  // Error handler
+  // Debug: Log all registered routes
+  console.log('🔍 Registered routes:');
+  app._router.stack.forEach((r: any) => {
+    if (r.route && r.route.path) {
+      console.log(`  ${Object.keys(r.route.methods).join(', ').toUpperCase()} ${r.route.path}`);
+    }
+  });
+
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
@@ -133,8 +140,9 @@ app.use((req, res, next) => {
     throw err;
   });
 
-  // Setup Vite or serve static
+  // --- MAIN CHANGE: Only import dev server in development! ---
   if (app.get("env") === "development") {
+    const { setupVite } = await import("./viteDev.js");
     await setupVite(app, server);
   } else {
     serveStatic(app);
