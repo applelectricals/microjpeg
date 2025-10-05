@@ -74,7 +74,7 @@ app.use((req, res, next) => {
   });
 
   next();
-});
+
 
 (async () => {
   // Initialize Redis and queue services
