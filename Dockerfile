@@ -8,6 +8,7 @@ COPY package*.json ./
 # Install ALL dependencies (including devDependencies needed for build)
 RUN npm ci
 
+RUN rm -rf dist
 # Copy all source files
 COPY . .
 
