@@ -12,10 +12,6 @@
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
-    "vite": "^5.4.19",
-    "tsx": "^4.19.1",
-    "esbuild": "^0.25.0",
-    "typescript": "5.6.3",
     "@aws-sdk/client-s3": "^3.884.0",
     "@aws-sdk/s3-request-presigner": "^3.884.0",
     "@google-cloud/storage": "^7.17.0",
@@ -78,6 +74,7 @@
     "cmdk": "^1.1.1",
     "compression": "^1.8.1",
     "connect-pg-simple": "^10.0.0",
+    "cors": "^2.8.5",
     "date-fns": "^3.6.0",
     "dcraw": "^1.0.3",
     "dotenv": "^17.2.2",
@@ -85,6 +82,7 @@
     "drizzle-zod": "^0.7.0",
     "dropbox": "^10.34.0",
     "embla-carousel-react": "^8.6.0",
+    "esbuild": "^0.25.0",
     "express": "^4.21.2",
     "express-session": "^1.18.1",
     "framer-motion": "^11.13.1",
@@ -114,15 +112,17 @@
     "stripe": "^18.5.0",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
+    "tsx": "^4.19.1",
     "tw-animate-css": "^1.2.5",
+    "typescript": "5.6.3",
     "vaul": "^1.1.2",
+    "vite": "^5.4.19",
     "wouter": "^3.3.5",
     "ws": "^8.18.0",
     "zod": "^3.24.2",
     "zod-validation-error": "^3.4.0"
   },
   "devDependencies": {
-    "vite": "^5.4.19",
     "@replit/vite-plugin-cartographer": "^0.2.8",
     "@replit/vite-plugin-runtime-error-modal": "^0.0.3",
     "@tailwindcss/typography": "^0.5.15",
@@ -142,7 +142,8 @@
     "drizzle-kit": "^0.30.4",
     "esbuild": "^0.25.0",
     "postcss": "^8.4.47",
-    "tailwindcss": "^3.4.17"
+    "tailwindcss": "^3.4.17",
+    "vite": "^5.4.19"
   },
   "optionalDependencies": {
     "bufferutil": "^4.0.8"
