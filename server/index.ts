@@ -45,7 +45,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// 5. Logging middleware for /api routes (wrap the previously misplaced code!)
+// 5. Logging middleware for /api routes
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
