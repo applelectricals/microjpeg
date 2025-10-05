@@ -1,24 +1,51 @@
 import './polyfill';
-import 'dotenv/config';
-import 'dotenv/config';
+import 'dotenv/config'; // Only import once
 import express, { type Request, Response, NextFunction } from "express";
+import session from 'express-session';
+import cors from 'cors'; // Added this import
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { TestPremiumExpiryManager } from "./testPremiumExpiry";
 import { initializeQueueService, shutdownQueueService } from "./queueService";
-//import { seedSuperuser } from "./superuser";
 
 const app = express();
-app.set('etag', false); // Disable ETags to prevent 304 responses
+
+app.set('trust proxy', 1);
+app.set('etag', false);
+
+// 1. Use CORS middleware first to handle cross-origin requests
+app.use(cors({
+  origin: 'https://microjpeg.com', // Replace with your frontend URL
+  credentials: true,
+}));
+
+// 2. Use body-parsing middleware to process incoming request bodies
 app.use(express.json({ limit: '200mb' }));
 app.use(express.urlencoded({ extended: false, limit: '200mb' }));
 
-// Force all traffic to serve the React app (prevent external redirects)
+// 3. Use session middleware to handle user sessions
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: true,
+    cookie: {
+      secure: true,
+      sameSite: 'none',
+    },
+  })
+);
+
+// 4. Force all traffic to serve the React app (prevent external redirects)
 app.use((req, res, next) => {
-  // Add security headers to prevent external redirects
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
+  
   
   const start = Date.now();
   const path = req.path;
