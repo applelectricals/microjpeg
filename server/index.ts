@@ -134,8 +134,10 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen(port, () => {
-  log(`serving on port ${port}`);
+  const hostname = '0.0.0.0'; // Add this line
+
+  server.listen(port, hostname, () => { // Add hostname as the second argument
+  log(`serving on port ${port} on ${hostname}`);
   TestPremiumExpiryManager.startExpiryChecker();
   });
     
