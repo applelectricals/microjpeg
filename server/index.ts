@@ -45,8 +45,8 @@ app.use((req, res, next) => {
   next();
 });
 
-  
-  
+// 5. Logging middleware for /api routes (wrap the previously misplaced code!)
+app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
   let capturedJsonResponse: Record<string, any> | undefined = undefined;
@@ -74,7 +74,7 @@ app.use((req, res, next) => {
   });
 
   next();
-
+});
 
 (async () => {
   // Initialize Redis and queue services
@@ -134,9 +134,9 @@ app.use((req, res, next) => {
   // Debug: Log all registered routes
   console.log('🔍 Registered routes:');
   app._router.stack.forEach((r: any) => {
-  if (r.route && r.route.path) {
-    console.log(`  ${Object.keys(r.route.methods).join(', ').toUpperCase()} ${r.route.path}`);
-  }
+    if (r.route && r.route.path) {
+      console.log(`  ${Object.keys(r.route.methods).join(', ').toUpperCase()} ${r.route.path}`);
+    }
   });
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -164,11 +164,10 @@ app.use((req, res, next) => {
   const hostname = '0.0.0.0'; // Add this line
 
   server.listen(port, hostname, () => { // Add hostname as the second argument
-  log(`serving on port ${port} on ${hostname}`);
-  TestPremiumExpiryManager.startExpiryChecker();
+    log(`serving on port ${port} on ${hostname}`);
+    TestPremiumExpiryManager.startExpiryChecker();
   });
     
-
   // Graceful shutdown handling
   process.on('SIGTERM', async () => {
     console.log('🔄 Received SIGTERM, shutting down gracefully...');
