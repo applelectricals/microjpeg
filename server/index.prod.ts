@@ -66,8 +66,8 @@ app.use((req, res, next) => {
   // Initialize services
   await initializeQueueService();
 
-  // Register API routes
-  registerRoutes(app);
+  // Register API routes - this returns the HTTP server
+  const httpServer = await registerRoutes(app);
 
   // Global error handler
   app.use((err: any, req: Request, res: Response, next: NextFunction) => {
@@ -84,7 +84,7 @@ app.use((req, res, next) => {
   const port = parseInt(process.env.PORT || '5000', 10);
   const hostname = '0.0.0.0';
 
-  const server = app.listen(port, hostname, () => {
+  const server = httpServer.listen(port, hostname, () => {
     console.log(`🌟 Production server running on port ${port} on ${hostname}`);
     TestPremiumExpiryManager.startExpiryChecker();
   });

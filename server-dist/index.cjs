@@ -15972,7 +15972,7 @@ app.use((req, res, next) => {
 });
 (async () => {
   await initializeQueueService();
-  registerRoutes(app);
+  const httpServer = await registerRoutes(app);
   app.use((err, req, res, next) => {
     const status = err.statusCode || err.status || 500;
     const message = err.message || "Internal Server Error";
@@ -15983,7 +15983,7 @@ app.use((req, res, next) => {
   serveStatic(app);
   const port = parseInt(process.env.PORT || "5000", 10);
   const hostname = "0.0.0.0";
-  const server = app.listen(port, hostname, () => {
+  const server = httpServer.listen(port, hostname, () => {
     console.log(`\u{1F31F} Production server running on port ${port} on ${hostname}`);
     TestPremiumExpiryManager.startExpiryChecker();
   });
