@@ -8293,7 +8293,7 @@ var import_memoizee = __toESM(require("memoizee"), 1);
 var import_connect_pg_simple = __toESM(require("connect-pg-simple"), 1);
 init_storage();
 if (!process.env.REPLIT_DOMAINS) {
-  throw new Error("Environment variable REPLIT_DOMAINS not provided");
+  console.warn("REPLIT_DOMAINS not provided - Replit authentication will be disabled");
 }
 var getOidcConfig = (0, import_memoizee.default)(
   async () => {
@@ -8311,6 +8311,9 @@ function updateUserSession(user, tokens) {
   user.expires_at = user.claims?.exp;
 }
 var isAuthenticated = async (req, res, next) => {
+  if (!process.env.REPLIT_DOMAINS) {
+    return next();
+  }
   const user = req.user;
   if (!req.isAuthenticated() || !user.expires_at) {
     return res.status(401).json({ message: "Unauthorized" });
@@ -15961,7 +15964,6 @@ app.use((req, res, next) => {
 });
 (async () => {
   await initializeQueueService();
-  const server = app.listen(0);
   registerRoutes(app);
   app.use((err, req, res, next) => {
     const status = err.statusCode || err.status || 500;
@@ -15973,7 +15975,7 @@ app.use((req, res, next) => {
   serveStatic(app);
   const port = parseInt(process.env.PORT || "5000", 10);
   const hostname = "0.0.0.0";
-  server.listen(port, hostname, () => {
+  const server = app.listen(port, hostname, () => {
     console.log(`\u{1F31F} Production server running on port ${port} on ${hostname}`);
     TestPremiumExpiryManager.startExpiryChecker();
   });
