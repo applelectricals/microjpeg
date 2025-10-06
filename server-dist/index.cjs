@@ -12472,8 +12472,8 @@ async function registerRoutes(app2) {
       const { password, ...userWithoutPassword } = user;
       res.json(userWithoutPassword);
     } catch (error) {
-      console.error("Authentication error:", error);
-      res.status(401).json({ message: "Unauthorized" });
+      console.error("Database error in /api/auth/user:", error);
+      res.status(500).json({ message: "Internal server error" });
     }
   });
   app2.post("/api/claim-bonus-operations", isAuthenticated, async (req, res) => {
@@ -12521,9 +12521,14 @@ async function registerRoutes(app2) {
       let userType = "anonymous";
       let hasBonusOperations = false;
       if (userId2) {
-        const user = await storage.getUser(userId2);
-        userType = user?.subscriptionTier || "free";
-        hasBonusOperations = (user?.purchasedCredits || 0) > 0;
+        try {
+          const user = await storage.getUser(userId2);
+          userType = user?.subscriptionTier || "free";
+          hasBonusOperations = (user?.purchasedCredits || 0) > 0;
+        } catch (error) {
+          console.error("Error getting user in universal-usage-stats:", error);
+          userType = "anonymous";
+        }
       }
       const tracker = new DualUsageTracker(userId2, sessionId, userType);
       const stats = await tracker.getUsageStats();
@@ -12554,17 +12559,31 @@ async function registerRoutes(app2) {
     }
   });
   app2.post("/api/check-operation", async (req, res) => {
-    const { filename, fileSize, pageIdentifier } = req.body;
-    const sessionId = req.sessionID;
-    const userId2 = req.user?.id;
-    let userType = "anonymous";
-    if (userId2) {
-      const user = await storage.getUser(userId2);
-      userType = user?.subscriptionTier || "free";
+    try {
+      const { filename, fileSize, pageIdentifier } = req.body;
+      const sessionId = req.sessionID;
+      const userId2 = req.user?.id;
+      let userType = "anonymous";
+      if (userId2) {
+        try {
+          const user = await storage.getUser(userId2);
+          userType = user?.subscriptionTier || "free";
+        } catch (error) {
+          console.error("Error getting user in check-operation:", error);
+          userType = "anonymous";
+        }
+      }
+      const tracker = new DualUsageTracker(userId2, sessionId, userType);
+      const result = await tracker.canPerformOperation(filename, fileSize, pageIdentifier);
+      res.json(result);
+    } catch (error) {
+      console.error("Error in /api/check-operation:", error);
+      res.status(500).json({
+        message: "Internal server error",
+        allowed: false,
+        reason: "Server error"
+      });
     }
-    const tracker = new DualUsageTracker(userId2, sessionId, userType);
-    const result = await tracker.canPerformOperation(filename, fileSize, pageIdentifier);
-    res.json(result);
   });
   app2.get("/api/usage-stats/:pageIdentifier?", async (req, res) => {
     try {

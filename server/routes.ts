@@ -1988,8 +1988,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { password, ...userWithoutPassword } = user;
       res.json(userWithoutPassword);
     } catch (error) {
-      console.error("Authentication error:", error);
-      res.status(401).json({ message: "Unauthorized" });
+      console.error("Database error in /api/auth/user:", error);
+      res.status(500).json({ message: "Internal server error" });
     }
   });
 
@@ -2050,9 +2050,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let userType = 'anonymous';
       let hasBonusOperations = false;
       if (userId) {
-        const user = await storage.getUser(userId);
-        userType = user?.subscriptionTier || 'free';
-        hasBonusOperations = (user?.purchasedCredits || 0) > 0;
+        try {
+          const user = await storage.getUser(userId);
+          userType = user?.subscriptionTier || 'free';
+          hasBonusOperations = (user?.purchasedCredits || 0) > 0;
+        } catch (error) {
+          console.error("Error getting user in universal-usage-stats:", error);
+          userType = 'anonymous'; // Fallback to anonymous
+        }
       }
       
       // Create tracker instance - use exact same logic as recordOperation
@@ -2093,20 +2098,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Check before processing
   app.post('/api/check-operation', async (req, res) => {
-    const { filename, fileSize, pageIdentifier } = req.body;
-    const sessionId = req.sessionID;
-    const userId = req.user?.id;
-    
-    let userType = 'anonymous';
-    if (userId) {
-      const user = await storage.getUser(userId);
-      userType = user?.subscriptionTier || 'free';
+    try {
+      const { filename, fileSize, pageIdentifier } = req.body;
+      const sessionId = req.sessionID;
+      const userId = req.user?.id;
+      
+      let userType = 'anonymous';
+      if (userId) {
+        try {
+          const user = await storage.getUser(userId);
+          userType = user?.subscriptionTier || 'free';
+        } catch (error) {
+          console.error("Error getting user in check-operation:", error);
+          userType = 'anonymous'; // Fallback to anonymous
+        }
+      }
+      
+      const tracker = new DualUsageTracker(userId, sessionId, userType);
+      const result = await tracker.canPerformOperation(filename, fileSize, pageIdentifier);
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error in /api/check-operation:", error);
+      res.status(500).json({ 
+        message: "Internal server error",
+        allowed: false,
+        reason: "Server error"
+      });
     }
-    
-    const tracker = new DualUsageTracker(userId, sessionId, userType);
-    const result = await tracker.canPerformOperation(filename, fileSize, pageIdentifier);
-    
-    res.json(result);
   });
 
   // ✅ UNIFIED PAGE-AWARE USAGE STATS API
