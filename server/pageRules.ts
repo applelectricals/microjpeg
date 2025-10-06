@@ -44,9 +44,16 @@ export const PAGE_RULES: Record<string, PageLimits> = {
     maxFileSize: 10 * 1024 * 1024, // 10MB
     maxConcurrentUploads: 1,
     
-    inputFormats: ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/avif', 
-                   'image/svg+xml', 'image/tiff', 'image/tif',
-                   '.cr2', '.arw', '.dng', '.nef', '.orf', '.raf', '.rw2'],
+    inputFormats: [
+      // Standard image MIME types
+      'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/avif', 
+      'image/svg+xml', 'image/tiff', 'image/tif',
+      // RAW formats by extension (since MIME types vary)
+      '.jpg', '.jpeg', '.png', '.webp', '.avif', '.svg', '.tiff', '.tif',
+      '.cr2', '.arw', '.dng', '.nef', '.orf', '.raf', '.rw2', '.crw',
+      // Additional RAW MIME types that some browsers might use
+      'image/x-adobe-dng', 'image/x-canon-cr2', 'image/x-nikon-nef', 'image/x-sony-arw'
+    ],
     outputFormats: ['jpeg', 'png', 'webp', 'avif'],
     autoConversionFormat: 'jpeg',
     
@@ -479,9 +486,19 @@ export function validateFileSize(file: { size: number }, pageIdentifier: string)
   
   if (file.size > limits.maxFileSize) {
     const maxMB = Math.round(limits.maxFileSize / (1024 * 1024));
+    const fileMB = Math.round(file.size / (1024 * 1024));
+    
+    // Special message for free users to encourage upgrade
+    if (pageIdentifier === 'free-no-auth' && limits.maxFileSize === 10 * 1024 * 1024) {
+      return { 
+        valid: false, 
+        error: `File size (${fileMB}MB) exceeds the ${maxMB}MB limit for free users. Upgrade to Premium for up to 50MB files or Enterprise for up to 200MB files.` 
+      };
+    }
+    
     return { 
       valid: false, 
-      error: `File size exceeds ${maxMB}MB limit for ${limits.displayName}` 
+      error: `File size (${fileMB}MB) exceeds ${maxMB}MB limit for ${limits.displayName}` 
     };
   }
   

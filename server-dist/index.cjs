@@ -2737,9 +2737,16 @@ function validateFileSize(file, pageIdentifier) {
   }
   if (file.size > limits.maxFileSize) {
     const maxMB = Math.round(limits.maxFileSize / (1024 * 1024));
+    const fileMB = Math.round(file.size / (1024 * 1024));
+    if (pageIdentifier === "free-no-auth" && limits.maxFileSize === 10 * 1024 * 1024) {
+      return {
+        valid: false,
+        error: `File size (${fileMB}MB) exceeds the ${maxMB}MB limit for free users. Upgrade to Premium for up to 50MB files or Enterprise for up to 200MB files.`
+      };
+    }
     return {
       valid: false,
-      error: `File size exceeds ${maxMB}MB limit for ${limits.displayName}`
+      error: `File size (${fileMB}MB) exceeds ${maxMB}MB limit for ${limits.displayName}`
     };
   }
   return { valid: true };
@@ -2792,6 +2799,7 @@ var init_pageRules = __esm({
         // 10MB
         maxConcurrentUploads: 1,
         inputFormats: [
+          // Standard image MIME types
           "image/jpeg",
           "image/jpg",
           "image/png",
@@ -2800,13 +2808,28 @@ var init_pageRules = __esm({
           "image/svg+xml",
           "image/tiff",
           "image/tif",
+          // RAW formats by extension (since MIME types vary)
+          ".jpg",
+          ".jpeg",
+          ".png",
+          ".webp",
+          ".avif",
+          ".svg",
+          ".tiff",
+          ".tif",
           ".cr2",
           ".arw",
           ".dng",
           ".nef",
           ".orf",
           ".raf",
-          ".rw2"
+          ".rw2",
+          ".crw",
+          // Additional RAW MIME types that some browsers might use
+          "image/x-adobe-dng",
+          "image/x-canon-cr2",
+          "image/x-nikon-nef",
+          "image/x-sony-arw"
         ],
         outputFormats: ["jpeg", "png", "webp", "avif"],
         autoConversionFormat: "jpeg",
@@ -8934,28 +8957,6 @@ function getUserPlan(user) {
   }
   return UNIFIED_PLANS.free;
 }
-function checkFormatAccess(planId, format) {
-  const plan = getUnifiedPlan(planId);
-  const premiumFormats = ["arw", "cr2", "dng", "nef", "orf", "raf", "rw2", "srf", "svg", "tiff", "tif"];
-  if (plan.limits.allowedFormats === "*") {
-    return { allowed: true };
-  }
-  const formatLower = format.toLowerCase();
-  const allowedFormats = plan.limits.allowedFormats;
-  if (allowedFormats.includes(formatLower)) {
-    return { allowed: true };
-  }
-  if (premiumFormats.includes(formatLower)) {
-    return {
-      allowed: false,
-      message: `${format.toUpperCase()} format requires Pro plan or higher`
-    };
-  }
-  return {
-    allowed: false,
-    message: `Unsupported format: ${format.toUpperCase()}`
-  };
-}
 
 // server/routes.ts
 var import_stripe3 = __toESM(require("stripe"), 1);
@@ -11284,14 +11285,29 @@ var upload2 = (0, import_multer2.default)({
     // 200MB limit (supports Enterprise users)
   },
   fileFilter: (req, file, cb) => {
-    const user = req.user;
-    const planId = user ? "free" : "anonymous";
-    const fileExtension = file.originalname.split(".").pop()?.toLowerCase() || "";
-    const formatCheck = checkFormatAccess(planId, fileExtension);
-    if (formatCheck.allowed) {
+    const supportedTypes = [
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/webp",
+      "image/avif",
+      "image/svg+xml",
+      "image/tiff",
+      "image/tif",
+      // RAW formats (browsers might use different MIME types)
+      "image/x-adobe-dng",
+      "image/x-canon-cr2",
+      "image/x-nikon-nef",
+      "image/x-sony-arw",
+      "application/octet-stream"
+      // Fallback for RAW files that browsers can't identify
+    ];
+    const fileName = file.originalname.toLowerCase();
+    const hasValidExtension = fileName.endsWith(".jpg") || fileName.endsWith(".jpeg") || fileName.endsWith(".png") || fileName.endsWith(".webp") || fileName.endsWith(".avif") || fileName.endsWith(".svg") || fileName.endsWith(".tiff") || fileName.endsWith(".tif") || fileName.endsWith(".cr2") || fileName.endsWith(".arw") || fileName.endsWith(".dng") || fileName.endsWith(".nef") || fileName.endsWith(".orf") || fileName.endsWith(".raf") || fileName.endsWith(".rw2") || fileName.endsWith(".crw");
+    if (supportedTypes.includes(file.mimetype) || hasValidExtension) {
       cb(null, true);
     } else {
-      cb(new Error(formatCheck.message || "File format not supported"));
+      cb(new Error(`File format not supported. Supported formats: JPG, PNG, WEBP, AVIF, SVG, TIFF, RAW (CR2, ARW, DNG, NEF, ORF, RAF, RW2)`));
     }
   }
 });
