@@ -11263,12 +11263,20 @@ function requireScopeFromAuth(req, res, next) {
   req.scopeEnforced = true;
   next();
 }
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error("Missing required Stripe secret: STRIPE_SECRET_KEY");
+var stripe3 = null;
+try {
+  if (!process.env.STRIPE_SECRET_KEY) {
+    console.warn("STRIPE_SECRET_KEY not provided - Stripe payments will be disabled");
+  } else {
+    stripe3 = new import_stripe3.default(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: "2025-08-27.basil"
+    });
+    console.log("\u2705 Stripe initialized successfully");
+  }
+} catch (error) {
+  console.error("Failed to initialize Stripe:", error);
+  console.warn("Stripe payments will be disabled");
 }
-var stripe3 = new import_stripe3.default(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2025-08-27.basil"
-});
 var upload2 = (0, import_multer2.default)({
   dest: "uploads/",
   limits: {
@@ -11719,7 +11727,10 @@ async function registerRoutes(app2) {
       });
     } catch (error) {
       console.error("Upload error:", error);
-      res.status(500).json({ error: "Failed to upload files" });
+      res.status(500).json({
+        error: "Failed to upload files",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
     }
   });
   app2.post("/api/process", async (req, res) => {

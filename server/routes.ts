@@ -440,12 +440,20 @@ import { apiManagementRouter } from "./apiManagement";
 import { apiDocsRouter } from "./apiDocs";
 
 // Initialize Stripe
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
+let stripe: Stripe | null = null;
+try {
+  if (!process.env.STRIPE_SECRET_KEY) {
+    console.warn('STRIPE_SECRET_KEY not provided - Stripe payments will be disabled');
+  } else {
+    stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: "2025-08-27.basil",
+    });
+    console.log('✅ Stripe initialized successfully');
+  }
+} catch (error) {
+  console.error('Failed to initialize Stripe:', error);
+  console.warn('Stripe payments will be disabled');
 }
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2025-08-27.basil",
-});
 
 // Configure multer for file uploads with dynamic limits
 const upload = multer({
@@ -1031,7 +1039,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error("Upload error:", error);
-      res.status(500).json({ error: "Failed to upload files" });
+      res.status(500).json({ 
+        error: "Failed to upload files",
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   });
 
