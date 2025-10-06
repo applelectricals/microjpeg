@@ -8,7 +8,7 @@ import { type Server } from "http";
 import viteConfig from "../vite.config";
 import { nanoid } from "nanoid";
 
-const viteLogger = createLogger();
+// This file is ONLY for dev. It imports Vite!
 
 export async function setupVite(app: Express, server: Server) {
   const serverOptions = {
@@ -16,6 +16,8 @@ export async function setupVite(app: Express, server: Server) {
     hmr: { server },
     allowedHosts: true as const,
   };
+
+  const viteLogger = createLogger();
 
   const vite = await createViteServer({
     ...viteConfig,
@@ -32,10 +34,12 @@ export async function setupVite(app: Express, server: Server) {
   });
 
   app.use(vite.middlewares);
+
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
 
     try {
+      // Calculate correct path for client/index.html
       const clientTemplate = path.resolve(
         dirname(fileURLToPath(import.meta.url)),
         "..",
@@ -43,11 +47,10 @@ export async function setupVite(app: Express, server: Server) {
         "index.html",
       );
 
-      // always reload the index.html file from disk incase it changes
       let template = await fs.promises.readFile(clientTemplate, "utf-8");
       template = template.replace(
         `src="/src/main.tsx"`,
-        `src="/src/main.tsx?v=${nanoid()}"`,
+        `src="/src/main.tsx?v=${nanoid()}"`
       );
       const page = await vite.transformIndexHtml(url, template);
       res.status(200).set({ "Content-Type": "text/html" }).end(page);

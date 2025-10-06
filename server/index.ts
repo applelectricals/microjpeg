@@ -4,7 +4,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import session from 'express-session';
 import cors from 'cors';
 import { registerRoutes } from "./routes";
-import { serveStatic, log } from "./viteStatic";
+import { serveStatic } from "./viteStatic"; // Only prod static serving here!
 import { TestPremiumExpiryManager } from "./testPremiumExpiry";
 import { initializeQueueService, shutdownQueueService } from "./queueService";
 
@@ -13,17 +13,14 @@ const app = express();
 app.set('trust proxy', 1);
 app.set('etag', false);
 
-// 1. Use CORS middleware first to handle cross-origin requests
 app.use(cors({
   origin: 'https://microjpeg.com',
   credentials: true,
 }));
 
-// 2. Use body-parsing middleware to process incoming request bodies
 app.use(express.json({ limit: '200mb' }));
 app.use(express.urlencoded({ extended: false, limit: '200mb' }));
 
-// 3. Use session middleware to handle user sessions
 app.use(
   session({
     secret: process.env.SESSION_SECRET,
@@ -36,7 +33,6 @@ app.use(
   })
 );
 
-// 4. Security headers
 app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -45,7 +41,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// 5. Logging middleware—for /api routes only!
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -64,12 +59,8 @@ app.use((req, res, next) => {
       if (capturedJsonResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
-
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
-
-      log(logLine);
+      if (logLine.length > 80) logLine = logLine.slice(0, 79) + "…";
+      console.log(logLine);
     }
   });
 
@@ -87,10 +78,9 @@ app.use((req, res, next) => {
     console.log('📝 Note: Set REDIS_URL environment variable for queue functionality');
   }
 
-  // 301 redirects for legacy URLs
+  // 301 redirects for legacy URLs (unchanged)
   app.use((req, res, next) => {
     const normalizedPath = req.path.endsWith('/') && req.path !== '/' ? req.path.slice(0, -1) : req.path;
-
     const redirectMap: Record<string, string> = {
       '/compress-free': '/free',
       '/compress-premium': '/premium',
@@ -112,13 +102,11 @@ app.use((req, res, next) => {
       '/cancellation-policy': '/legal/cancellation',
       '/payment-protection': '/legal/payment-protection'
     };
-
     const redirectTo = redirectMap[normalizedPath];
     if (redirectTo) {
       const queryString = req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
       return res.redirect(301, redirectTo + queryString);
     }
-
     next();
   });
 
@@ -135,12 +123,11 @@ app.use((req, res, next) => {
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
-
     res.status(status).json({ message });
     throw err;
   });
 
-  // --- MAIN CHANGE: Only import dev server in development! ---
+  // **This is the KEY change for the split!**
   if (app.get("env") === "development") {
     const { setupVite } = await import("./viteDev.js");
     await setupVite(app, server);
@@ -152,7 +139,7 @@ app.use((req, res, next) => {
   const hostname = '0.0.0.0';
 
   server.listen(port, hostname, () => {
-    log(`serving on port ${port} on ${hostname}`);
+    console.log(`serving on port ${port} on ${hostname}`);
     TestPremiumExpiryManager.startExpiryChecker();
   });
 
