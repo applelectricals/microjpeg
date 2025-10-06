@@ -15,8 +15,8 @@ COPY . .
 # Build the frontend (Vite) - outputs to dist/
 RUN npx vite build
 
-# Build the server bundle - output to server-dist/ using production entry point
-RUN npx esbuild server/index.prod.ts --platform=node --bundle --outfile=server-dist/index.js --format=esm
+# Build the server - just transpile TypeScript, don't bundle dependencies
+RUN npx esbuild server/index.prod.ts --platform=node --outfile=server-dist/index.js --format=esm --packages=external
 
 # Production stage
 FROM node:20-slim AS production
@@ -33,8 +33,8 @@ RUN npm ci --only=production && npm cache clean --force
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/server-dist ./server-dist
 
-# Copy any other necessary files (like static assets from server)
-COPY --from=builder /app/server/public ./server/public
+# Copy server source files needed for imports (since we're not bundling)
+COPY --from=builder /app/server ./server
 
 EXPOSE 3000
 
