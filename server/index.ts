@@ -128,9 +128,14 @@ app.use((req, res, next) => {
   });
 
   // **This is the KEY change for the split!**
-  if (app.get("env") === "development") {
-    const { setupVite } = await import("./viteDev.js");
-    await setupVite(app, server);
+  if (process.env.NODE_ENV === "development") {
+    try {
+      const { setupVite } = await import("./viteDev.js");
+      await setupVite(app, server);
+    } catch (error) {
+      console.log("Development mode detected but viteDev.js not available, falling back to static serving");
+      serveStatic(app);
+    }
   } else {
     serveStatic(app);
   }
