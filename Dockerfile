@@ -2,22 +2,22 @@ FROM node:20
 
 WORKDIR /app
 
-# Copy package files and install only production dependencies first (for caching)
+# Install dependencies (including devDeps for build)
 COPY package*.json ./
 RUN npm install
 
-# Copy the rest of the source code
+# Copy all source code
 COPY . .
 
-# Clean and build the server bundle
-RUN rm -rf dist \
-  && npx esbuild server/index.ts --platform=node --bundle --outfile=dist/index.js
+# [Debug Step] Make sure your server/index.ts is present
+RUN ls -l server
 
 # Build the frontend (Vite)
 RUN npx vite build
 
-# Expose your backend port (adjust if needed)
+# Clean and build the server bundle
+RUN rm -rf dist && npx esbuild server/index.ts --platform=node --bundle --outfile=dist/index.js
+
 EXPOSE 3000
 
-# Start the server
 CMD ["node", "dist/index.js"]
