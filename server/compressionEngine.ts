@@ -3,9 +3,17 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-const dcraw = require('dcraw');
+
+// Conditional require for dcraw (only works in development with proper ESM setup)
+let dcraw: any;
+try {
+  if (typeof require !== 'undefined') {
+    dcraw = require('dcraw');
+  }
+} catch (error) {
+  console.log('dcraw not available, RAW processing disabled');
+  dcraw = null;
+}
 
 const execAsync = promisify(exec);
 
@@ -53,6 +61,10 @@ export class CompressionEngine {
     const { quality = 75, width, height } = options;
     
     try {
+      if (!dcraw) {
+        throw new Error('dcraw not available in this environment');
+      }
+      
       console.log(`Processing RAW file with dcraw: ${inputPath} -> ${outputPath}`);
       
       // Read the RAW file
@@ -150,6 +162,10 @@ export class CompressionEngine {
    */
   static async canDcrawProcess(filePath: string): Promise<boolean> {
     try {
+      if (!dcraw) {
+        return false;
+      }
+      
       const rawBuffer = await fs.readFile(filePath);
       
       // Try to get metadata to verify it's a valid RAW file

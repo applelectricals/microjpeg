@@ -15,8 +15,8 @@ COPY . .
 # Build the frontend (Vite) - outputs to dist/
 RUN npx vite build
 
-# Build the server - just transpile TypeScript, don't bundle dependencies
-RUN npx esbuild server/index.prod.ts --platform=node --outfile=server-dist/index.js --format=esm --packages=external
+# Build the server - bundle but exclude problematic packages
+RUN npx esbuild server/index.prod.ts --platform=node --bundle --outfile=server-dist/index.cjs --format=cjs --packages=external
 
 # Production stage
 FROM node:20-slim AS production
@@ -33,12 +33,9 @@ RUN npm ci --only=production && npm cache clean --force
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/server-dist ./server-dist
 
-# Copy server source files needed for imports (since we're not bundling)
-COPY --from=builder /app/server ./server
-
 EXPOSE 3000
 
 # Set production environment (this will be overridden by Coolify at runtime)
 ENV NODE_ENV=production
 
-CMD ["node", "server-dist/index.js"]
+CMD ["node", "server-dist/index.cjs"]
