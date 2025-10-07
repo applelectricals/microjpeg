@@ -1,16 +1,32 @@
 import { Request, Response } from 'express';
-import Razorpay from 'razorpay';
+// import Razorpay from 'razorpay'; // DISABLED: Razorpay not needed
 import { db } from './db';
-import { users, subscriptions, paymentTransactions } from '@shared/schema';
+import { users, paymentTransactions } from '@shared/schema'; // Removed subscriptions import
 import { eq } from 'drizzle-orm';
 // Use simplified email approach for now
 import crypto from 'crypto';
 
-// Initialize Razorpay
-const razorpayInstance = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID!,
-  key_secret: process.env.RAZORPAY_KEY_SECRET!,
-});
+// DISABLED: Razorpay initialization - not needed
+// Initialize Razorpay only if credentials are available
+// let razorpayInstance: Razorpay | null = null;
+
+// const keyId = process.env.RAZORPAY_KEY_ID?.trim();
+// const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
+
+// if (keyId && keySecret && keyId !== '' && keySecret !== '') {
+//   try {
+//     razorpayInstance = new Razorpay({
+//       key_id: keyId,
+//       key_secret: keySecret,
+//     });
+//     console.log('Payment.ts: Razorpay instance initialized');
+//   } catch (error) {
+//     console.error('Payment.ts: Razorpay initialization failed:', error);
+//     razorpayInstance = null;
+//   }
+// } else {
+//   console.log('Payment.ts: Razorpay credentials not found - instance disabled');
+// }
 
 // Plan configuration
 export const PLANS = {
@@ -63,6 +79,13 @@ export interface PaymentData {
 
 // Create Razorpay order
 export async function createRazorpayOrder(req: Request, res: Response) {
+  // DISABLED: Razorpay service not needed
+  return res.status(503).json({ 
+    error: 'Razorpay service is disabled',
+    message: 'This payment method is currently unavailable'
+  });
+  
+  /*
   try {
     const { plan, amount } = req.body;
     
@@ -100,10 +123,18 @@ export async function createRazorpayOrder(req: Request, res: Response) {
       message: error.message 
     });
   }
+  */
 }
 
 // Verify Razorpay payment
 export async function verifyRazorpayPayment(req: Request, res: Response) {
+  // DISABLED: Razorpay service not needed
+  return res.status(503).json({ 
+    error: 'Razorpay service is disabled',
+    message: 'This payment method is currently unavailable'
+  });
+  
+  /*
   try {
     const { 
       razorpay_order_id, 
@@ -184,6 +215,7 @@ export async function verifyRazorpayPayment(req: Request, res: Response) {
       message: error.message 
     });
   }
+  */
 }
 
 // Process PayPal payment

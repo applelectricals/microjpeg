@@ -405,8 +405,8 @@ async function processCompressionJob(
 }
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { 
-  createRazorpayOrder, 
-  verifyRazorpayPayment, 
+  // createRazorpayOrder, // DISABLED: Razorpay not needed
+  // verifyRazorpayPayment, // DISABLED: Razorpay not needed
   processPayPalPayment, 
   getSubscriptionStatus, 
   cancelSubscription 
@@ -5110,8 +5110,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
   // Payment processing routes
-  app.post('/api/payment/razorpay/create-order', isAuthenticated, createRazorpayOrder);
-  app.post('/api/payment/razorpay/verify', isAuthenticated, verifyRazorpayPayment);
+  // app.post('/api/payment/razorpay/create-order', isAuthenticated, createRazorpayOrder); // DISABLED: Razorpay not needed
+  // app.post('/api/payment/razorpay/verify', isAuthenticated, verifyRazorpayPayment); // DISABLED: Razorpay not needed
   app.post('/api/payment/paypal/process', isAuthenticated, processPayPalPayment);
   app.get('/api/subscription/status', isAuthenticated, getSubscriptionStatus);
   app.post('/api/subscription/cancel', isAuthenticated, cancelSubscription);
