@@ -6,6 +6,28 @@ import { userUsage, operationLog } from '@shared/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { getAppSettings } from '../superuser';
 
+// Performance optimization: Simple in-memory cache
+const usageCache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_TTL = 30000; // 30 seconds cache - safe for usage stats
+
+// Helper function to get cached usage
+function getCachedUsage(key: string): any | null {
+  const cached = usageCache.get(key);
+  if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
+    return cached.data;
+  }
+  usageCache.delete(key);
+  return null;
+}
+
+// Helper function to set cached usage  
+function setCachedUsage(key: string, data: any): void {
+  usageCache.set(key, {
+    data,
+    timestamp: Date.now()
+  });
+}
+
 export interface AuditContext {
   adminUserId?: string;
   bypassReason?: string;
@@ -219,6 +241,14 @@ export class DualUsageTracker {
     try {
       console.log('📊 DualUsageTracker.getCurrentUsage called for:', { userType: this.userType, userId: this.userId });
       
+      // ⚡ PERFORMANCE FIX: Check cache first
+      const cacheKey = `usage_${this.userId || 'anonymous'}_${this.sessionId}`;
+      const cached = getCachedUsage(cacheKey);
+      if (cached) {
+        console.log('⚡ Using cached usage data - performance boost!');
+        return cached;
+      }
+      
       const now = new Date();
     
       // Try to get existing usage
@@ -229,6 +259,8 @@ export class DualUsageTracker {
           eq(userUsage.sessionId, this.sessionId)
         ))
         .limit(1);
+
+      let usage;
 
       if (!usageResult || usageResult.length === 0) {
         // Create new usage record
@@ -247,10 +279,10 @@ export class DualUsageTracker {
           monthlyResetAt: new Date(now.getFullYear(), now.getMonth() + 1, 1) // Next month
         }).returning();
         
-        return newUsage;
+        usage = newUsage;
+      } else {
+        usage = usageResult[0];
       }
-
-      const usage = usageResult[0];
 
       // Check and reset counters if needed
       const hourlyReset = new Date(usage.hourlyResetAt || new Date());
@@ -300,13 +332,17 @@ export class DualUsageTracker {
           ));
       }
 
+      // ⚡ PERFORMANCE FIX: Cache the result
+      setCachedUsage(cacheKey, usage);
+      console.log('💾 Cached usage data for faster future requests');
+
       return usage;
       
     } catch (error) {
       console.error('Error getting current usage (database may not be updated):', error);
       console.log('🔄 Falling back to default usage values');
       // Return default values on error - this allows the system to work even if DB schema is outdated
-      return {
+      const defaultUsage = {
         regularHourly: 0,
         regularDaily: 0,
         regularMonthly: 0,
@@ -318,6 +354,12 @@ export class DualUsageTracker {
         dailyResetAt: new Date(),
         monthlyResetAt: new Date()
       };
+      
+      // Cache default values briefly to avoid repeated errors
+      const cacheKey = `usage_${this.userId || 'anonymous'}_${this.sessionId}`;
+      setCachedUsage(cacheKey, defaultUsage);
+      
+      return defaultUsage;
     }
   }
 
@@ -353,6 +395,11 @@ export class DualUsageTracker {
       }
       
       console.log(`✅ Usage incremented: ${fileType} operation for ${this.userType} user`);
+      
+      // ⚡ PERFORMANCE FIX: Invalidate cache after usage increment
+      const cacheKey = `usage_${this.userId || 'anonymous'}_${this.sessionId}`;
+      usageCache.delete(cacheKey);
+      console.log('🗑️ Cache invalidated after usage increment');
       
     } catch (error) {
       console.error('Error incrementing usage (database may not be updated):', error);
