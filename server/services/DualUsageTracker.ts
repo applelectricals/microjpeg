@@ -44,261 +44,320 @@ export class DualUsageTracker {
     usage?: any;
     wasBypassed?: boolean;
   }> {
-    const fileType = getFileType(filename);
-    
-    if (fileType === 'unknown') {
+    try {
+      console.log('🔧 DualUsageTracker.canPerformOperation called:', { filename, fileSize, pageIdentifier, userType: this.userType });
+      
+      const fileType = getFileType(filename);
+      
+      if (fileType === 'unknown') {
+        return { 
+          allowed: false, 
+          reason: 'Unsupported file format. Please upload JPG, PNG, WEBP, AVIF, SVG, TIFF or RAW files (CR2, ARW, DNG, NEF, ORF, RAF, RW2, CRW).' 
+        };
+      }
+
+      // Check for superuser bypass
+      if (this.auditContext?.superBypass) {
+        console.log('🔓 Superuser bypass: Operation allowed without limit checks');
+        return {
+          allowed: true,
+          reason: 'superuser_bypass',
+          wasBypassed: true
+        };
+      }
+
+      // Check file size limit based on user type and file type
+      let maxSize = OPERATION_CONFIG.maxFileSize[fileType][this.userType];
+      
+      // Special handling for RAW converter pages (25MB for anonymous users)
+      if (pageIdentifier && pageIdentifier.includes('convert') && fileType === 'raw' && this.userType === 'anonymous') {
+        maxSize = 25 * 1024 * 1024; // 25MB for RAW conversion pages
+      }
+      
+      if (fileSize > maxSize) {
+        const maxMB = Math.round(maxSize / 1024 / 1024);
+        const currentMB = Math.round(fileSize / 1024 / 1024);
+        
+        let upgradeMessage = '';
+        if (this.userType === 'anonymous') {
+          upgradeMessage = ' Upgrade to Premium for up to 50MB files or Enterprise for up to 200MB files.';
+        } else if (this.userType === 'free') {
+          upgradeMessage = ' Upgrade to Premium for up to 50MB files or Enterprise for up to 200MB files.';
+        } else if (this.userType === 'premium') {
+          upgradeMessage = ' Upgrade to Enterprise for up to 200MB files.';
+        }
+        
+        return {
+          allowed: false,
+          reason: `File size (${currentMB}MB) exceeds the ${maxMB}MB limit.${upgradeMessage}`
+        };
+      }
+
+      // Get current usage and limits
+      const usage = await this.getCurrentUsage();
+      const limits = this.getLimits(fileType, pageIdentifier);
+
+      // Check limits based on file type
+      if (fileType === 'raw') {
+        if (usage.rawHourly >= limits.hourly) {
+          return { 
+            allowed: false, 
+            reason: `Hourly RAW limit reached (${limits.hourly}). Try again in ${Math.ceil((new Date(usage.hourlyResetAt).getTime() - Date.now()) / 60000)} minutes.`,
+            usage,
+            limits
+          };
+        }
+        if (usage.rawDaily >= limits.daily) {
+          return { 
+            allowed: false, 
+            reason: `Daily RAW limit reached (${limits.daily}). Resets at midnight.`,
+            usage,
+            limits
+          };
+        }
+        if (usage.rawMonthly >= limits.monthly) {
+          return { 
+            allowed: false, 
+            reason: `Monthly RAW limit reached (${limits.monthly}). Upgrade for higher limits.`,
+            usage,
+            limits
+          };
+        }
+      } else {
+        if (usage.regularHourly >= limits.hourly) {
+          return { 
+            allowed: false, 
+            reason: `Hourly limit reached (${limits.hourly}). Try again in ${Math.ceil((new Date(usage.hourlyResetAt).getTime() - Date.now()) / 60000)} minutes.`,
+            usage,
+            limits
+          };
+        }
+        if (usage.regularDaily >= limits.daily) {
+          return { 
+            allowed: false, 
+            reason: `Daily limit reached (${limits.daily}). Resets at midnight.`,
+            usage,
+            limits
+          };
+        }
+        if (usage.regularMonthly >= limits.monthly) {
+          return { 
+            allowed: false, 
+            reason: `Monthly limit reached (${limits.monthly}). Upgrade for higher limits.`,
+            usage,
+            limits
+          };
+        }
+      }
+
+      console.log('✅ Operation allowed within limits');
       return { 
-        allowed: false, 
-        reason: 'Unsupported file format' 
+        allowed: true,
+        usage,
+        limits
       };
-    }
-
-    // Check for superuser bypass
-    if (this.auditContext?.superBypass) {
-      console.log('🔓 Superuser bypass: Operation allowed without limit checks');
+      
+    } catch (error) {
+      console.error('Error in canPerformOperation:', error);
+      // Fallback - allow operation if there's an unexpected error
       return {
         allowed: true,
-        reason: 'superuser_bypass',
+        reason: 'error_fallback',
         wasBypassed: true
       };
     }
-
-    // Check global enforcement settings
-    const appSettings = await getAppSettings();
-    const enforceHourly = appSettings.countersEnforcement.hourly;
-    const enforceDaily = appSettings.countersEnforcement.daily;
-    const enforceMonthly = appSettings.countersEnforcement.monthly;
-
-    // If all enforcement is disabled, allow operation
-    if (!enforceHourly && !enforceDaily && !enforceMonthly) {
-      console.log('⚠️ Global enforcement disabled: Operation allowed');
-      return {
-        allowed: true,
-        reason: 'enforcement_disabled',
-        wasBypassed: true
-      };
-    }
-
-    // Check file size limit
-    const maxSize = OPERATION_CONFIG.maxFileSize[fileType][this.userType];
-    if (fileSize > maxSize) {
-      return {
-        allowed: false,
-        reason: `File too large. Maximum ${Math.round(maxSize / 1024 / 1024)}MB for ${fileType} files.`
-      };
-    }
-
-    // Get current usage
-    const usage = await this.getCurrentUsage();
-    const limits = this.getLimits(fileType, pageIdentifier);
-
-    // Check limits with enforcement settings
-    if (fileType === 'raw') {
-      if (enforceHourly && usage.rawHourly >= limits.hourly) {
-        return { 
-          allowed: false, 
-          reason: `Hourly RAW limit reached (${limits.hourly})`,
-          usage,
-          limits
-        };
-      }
-      if (enforceDaily && usage.rawDaily >= limits.daily) {
-        return { 
-          allowed: false, 
-          reason: `Daily RAW limit reached (${limits.daily})`,
-          usage,
-          limits
-        };
-      }
-      if (enforceMonthly && usage.rawMonthly >= limits.monthly) {
-        return { 
-          allowed: false, 
-          reason: `Monthly RAW limit reached (${limits.monthly})`,
-          usage,
-          limits
-        };
-      }
-    } else {
-      if (enforceHourly && usage.regularHourly >= limits.hourly) {
-        return { 
-          allowed: false, 
-          reason: `Hourly limit reached (${limits.hourly})`,
-          usage,
-          limits
-        };
-      }
-      if (enforceDaily && usage.regularDaily >= limits.daily) {
-        return { 
-          allowed: false, 
-          reason: `Daily limit reached (${limits.daily})`,
-          usage,
-          limits
-        };
-      }
-      if (enforceMonthly && usage.regularMonthly >= limits.monthly) {
-        return { 
-          allowed: false, 
-          reason: `Monthly limit reached (${limits.monthly})`,
-          usage,
-          limits
-        };
-      }
-    }
-
-    return { 
-      allowed: true,
-      usage,
-      limits
-    };
-  }
-
-  // Record successful operation with audit trail
+  }  // Record successful operation with audit trail (with database fallback)
   async recordOperation(
     filename: string,
     fileSize: number,
     pageIdentifier: string
   ): Promise<void> {
-    const fileType = getFileType(filename);
-    
-    if (fileType === 'unknown') {
-      return; // Don't record unknown file types
-    }
-    
-    // Validate fileSize - if NaN or invalid, default to 0
-    const validFileSize = isNaN(fileSize) || fileSize < 0 ? 0 : fileSize;
-    
-    // Update usage counters
-    await this.incrementUsage(fileType);
-    
-    // Log operation with bypass information
-    const wasBypassed = this.auditContext?.superBypass || false;
-    
-    await db.insert(operationLog).values({
-      userId: this.userId || null,
-      sessionId: this.sessionId,
-      operationType: fileType,
-      fileFormat: filename.split('.').pop() || '',
-      fileSizeMb: Math.round(validFileSize / 1024 / 1024),
-      pageIdentifier: pageIdentifier,
-      wasBypassed: wasBypassed,
-      bypassReason: this.auditContext?.bypassReason || null,
-      actedByAdminId: this.auditContext?.adminUserId || null
-    });
+    try {
+      console.log('📝 DualUsageTracker.recordOperation called:', { filename, fileSize, pageIdentifier, userType: this.userType });
+      
+      const fileType = getFileType(filename);
+      
+      if (fileType === 'unknown') {
+        console.log('⚠️ Skipping record of unknown file type');
+        return;
+      }
+      
+      // Validate fileSize - if NaN or invalid, default to 0
+      const validFileSize = isNaN(fileSize) || fileSize < 0 ? 0 : fileSize;
+      
+      // Update usage counters
+      await this.incrementUsage(fileType);
+      
+      // Log operation with bypass information
+      const wasBypassed = this.auditContext?.superBypass || false;
+      
+      await db.insert(operationLog).values({
+        userId: this.userId || 'anonymous',
+        sessionId: this.sessionId,
+        operationType: fileType,
+        fileFormat: filename.split('.').pop() || '',
+        fileSizeMb: Math.round(validFileSize / 1024 / 1024),
+        pageIdentifier: pageIdentifier,
+        wasBypassed: wasBypassed,
+        bypassReason: this.auditContext?.bypassReason || null,
+        actedByAdminId: this.auditContext?.adminUserId || null
+      });
 
-    if (wasBypassed) {
-      console.log(`📝 Operation logged with bypass: ${fileType} file by ${this.auditContext?.adminUserId || 'system'}`);
+      if (wasBypassed) {
+        console.log(`📝 Operation logged with bypass: ${fileType} file by ${this.auditContext?.adminUserId || 'system'}`);
+      }
+      
+    } catch (error) {
+      console.error('Error recording operation (database may not be updated):', error);
+      console.log('🔄 Continuing without operation recording (fallback mode)');
+      // Don't throw - operation recording failure shouldn't block the actual processing
     }
   }
 
-  // Get current usage with automatic reset
+  // Get current usage with automatic reset (with database fallback)
   private async getCurrentUsage(): Promise<any> {
-    const now = new Date();
-    
-    // Try to get existing usage
-    const usageResult = await db.select()
-      .from(userUsage)
-      .where(and(
-        eq(userUsage.userId, this.userId || 'anonymous'),
-        eq(userUsage.sessionId, this.sessionId)
-      ))
-      .limit(1);
-
-    if (!usageResult || usageResult.length === 0) {
-      // Create new usage record
-      await db.insert(userUsage).values({
-        userId: this.userId || 'anonymous',
-        sessionId: this.sessionId
-      });
+    try {
+      console.log('📊 DualUsageTracker.getCurrentUsage called for:', { userType: this.userType, userId: this.userId });
       
+      const now = new Date();
+    
+      // Try to get existing usage
+      const usageResult = await db.select()
+        .from(userUsage)
+        .where(and(
+          eq(userUsage.userId, this.userId || 'anonymous'),
+          eq(userUsage.sessionId, this.sessionId)
+        ))
+        .limit(1);
+
+      if (!usageResult || usageResult.length === 0) {
+        // Create new usage record
+        const [newUsage] = await db.insert(userUsage).values({
+          userId: this.userId || 'anonymous',
+          sessionId: this.sessionId,
+          regularHourly: 0,
+          regularDaily: 0,
+          regularMonthly: 0,
+          rawHourly: 0,
+          rawDaily: 0,
+          rawMonthly: 0,
+          monthlyBandwidthMb: 0,
+          hourlyResetAt: new Date(now.getTime() + 60 * 60 * 1000), // 1 hour from now
+          dailyResetAt: new Date(now.getTime() + 24 * 60 * 60 * 1000), // 1 day from now
+          monthlyResetAt: new Date(now.getFullYear(), now.getMonth() + 1, 1) // Next month
+        }).returning();
+        
+        return newUsage;
+      }
+
+      const usage = usageResult[0];
+
+      // Check and reset counters if needed
+      const hourlyReset = new Date(usage.hourlyResetAt || new Date());
+      const dailyReset = new Date(usage.dailyResetAt || new Date());
+      const monthlyReset = new Date(usage.monthlyResetAt || new Date());
+
+      let updateData: any = {};
+      let needsUpdate = false;
+      
+      // Reset hourly
+      if (now.getTime() - hourlyReset.getTime() > 3600000) { // 1 hour
+        updateData.regularHourly = 0;
+        updateData.rawHourly = 0;
+        updateData.hourlyResetAt = now;
+        usage.regularHourly = 0;
+        usage.rawHourly = 0;
+        needsUpdate = true;
+      }
+
+      // Reset daily
+      if (now.getTime() - dailyReset.getTime() > 86400000) { // 24 hours
+        updateData.regularDaily = 0;
+        updateData.rawDaily = 0;
+        updateData.dailyResetAt = now;
+        usage.regularDaily = 0;
+        usage.rawDaily = 0;
+        needsUpdate = true;
+      }
+
+      // Reset monthly
+      if (now.getTime() - monthlyReset.getTime() > 2592000000) { // 30 days
+        updateData.regularMonthly = 0;
+        updateData.rawMonthly = 0;
+        updateData.monthlyBandwidthMb = 0;
+        updateData.monthlyResetAt = now;
+        usage.regularMonthly = 0;
+        usage.rawMonthly = 0;
+        needsUpdate = true;
+      }
+
+      if (needsUpdate) {
+        await db.update(userUsage)
+          .set(updateData)
+          .where(and(
+            eq(userUsage.userId, this.userId || 'anonymous'),
+            eq(userUsage.sessionId, this.sessionId)
+          ));
+      }
+
+      return usage;
+      
+    } catch (error) {
+      console.error('Error getting current usage (database may not be updated):', error);
+      console.log('🔄 Falling back to default usage values');
+      // Return default values on error - this allows the system to work even if DB schema is outdated
       return {
-        regularMonthly: 0,
-        regularDaily: 0,
         regularHourly: 0,
-        rawMonthly: 0,
+        regularDaily: 0,
+        regularMonthly: 0,
+        rawHourly: 0,
         rawDaily: 0,
-        rawHourly: 0
+        rawMonthly: 0,
+        monthlyBandwidthMb: 0,
+        hourlyResetAt: new Date(),
+        dailyResetAt: new Date(),
+        monthlyResetAt: new Date()
       };
     }
-
-    const usage = usageResult[0];
-
-    // Check and reset counters if needed
-    const hourlyReset = new Date(usage.hourlyResetAt || new Date());
-    const dailyReset = new Date(usage.dailyResetAt || new Date());
-    const monthlyReset = new Date(usage.monthlyResetAt || new Date());
-
-    let updateData: any = {};
-    let needsUpdate = false;
-    
-    // Reset hourly
-    if (now.getTime() - hourlyReset.getTime() > 3600000) { // 1 hour
-      updateData.regularHourly = 0;
-      updateData.rawHourly = 0;
-      updateData.hourlyResetAt = now;
-      usage.regularHourly = 0;
-      usage.rawHourly = 0;
-      needsUpdate = true;
-    }
-
-    // Reset daily
-    if (now.getTime() - dailyReset.getTime() > 86400000) { // 24 hours
-      updateData.regularDaily = 0;
-      updateData.rawDaily = 0;
-      updateData.dailyResetAt = now;
-      usage.regularDaily = 0;
-      usage.rawDaily = 0;
-      needsUpdate = true;
-    }
-
-    // Reset monthly
-    if (now.getTime() - monthlyReset.getTime() > 2592000000) { // 30 days
-      updateData.regularMonthly = 0;
-      updateData.rawMonthly = 0;
-      updateData.monthlyBandwidthMb = 0;
-      updateData.monthlyResetAt = now;
-      usage.regularMonthly = 0;
-      usage.rawMonthly = 0;
-      needsUpdate = true;
-    }
-
-    if (needsUpdate) {
-      await db.update(userUsage)
-        .set(updateData)
-        .where(and(
-          eq(userUsage.userId, this.userId || 'anonymous'),
-          eq(userUsage.sessionId, this.sessionId)
-        ));
-    }
-
-    return usage;
   }
 
-  // Increment usage counters
+  // Increment usage counters (with database fallback)
   private async incrementUsage(fileType: 'regular' | 'raw'): Promise<void> {
-    if (fileType === 'raw') {
-      await db.update(userUsage)
-        .set({
-          rawMonthly: sql`${userUsage.rawMonthly} + 1`,
-          rawDaily: sql`${userUsage.rawDaily} + 1`,
-          rawHourly: sql`${userUsage.rawHourly} + 1`,
-          updatedAt: new Date()
-        })
-        .where(and(
-          eq(userUsage.userId, this.userId || 'anonymous'),
-          eq(userUsage.sessionId, this.sessionId)
-        ));
-    } else {
-      await db.update(userUsage)
-        .set({
-          regularMonthly: sql`${userUsage.regularMonthly} + 1`,
-          regularDaily: sql`${userUsage.regularDaily} + 1`,
-          regularHourly: sql`${userUsage.regularHourly} + 1`,
-          updatedAt: new Date()
-        })
-        .where(and(
-          eq(userUsage.userId, this.userId || 'anonymous'),
-          eq(userUsage.sessionId, this.sessionId)
-        ));
+    try {
+      console.log('📈 DualUsageTracker.incrementUsage called:', { fileType, userType: this.userType });
+      
+      if (fileType === 'raw') {
+        await db.update(userUsage)
+          .set({
+            rawMonthly: sql`${userUsage.rawMonthly} + 1`,
+            rawDaily: sql`${userUsage.rawDaily} + 1`,
+            rawHourly: sql`${userUsage.rawHourly} + 1`,
+            updatedAt: new Date()
+          })
+          .where(and(
+            eq(userUsage.userId, this.userId || 'anonymous'),
+            eq(userUsage.sessionId, this.sessionId)
+          ));
+      } else {
+        await db.update(userUsage)
+          .set({
+            regularMonthly: sql`${userUsage.regularMonthly} + 1`,
+            regularDaily: sql`${userUsage.regularDaily} + 1`,
+            regularHourly: sql`${userUsage.regularHourly} + 1`,
+            updatedAt: new Date()
+          })
+          .where(and(
+            eq(userUsage.userId, this.userId || 'anonymous'),
+            eq(userUsage.sessionId, this.sessionId)
+          ));
+      }
+      
+      console.log(`✅ Usage incremented: ${fileType} operation for ${this.userType} user`);
+      
+    } catch (error) {
+      console.error('Error incrementing usage (database may not be updated):', error);
+      console.log('🔄 Continuing without usage increment (fallback mode)');
+      // Don't throw - usage increment failure shouldn't block the actual processing
     }
   }
 

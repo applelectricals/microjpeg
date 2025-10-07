@@ -30,10 +30,32 @@ export const uploads = pgTable('uploads', {
 });
 
 export const compressionJobs = pgTable('compression_jobs', {
-  id: serial('id').primaryKey(),
-  userId: integer('user_id'),
-  status: varchar('status', { length: 50 }),
-  createdAt: timestamp('created_at').defaultNow()
+  id: varchar('id', { length: 255 }).primaryKey(),
+  userId: varchar('user_id', { length: 255 }),
+  sessionId: varchar('session_id', { length: 255 }),
+  originalFilename: varchar('original_filename', { length: 255 }).notNull(),
+  originalPath: varchar('original_path', { length: 500 }),
+  compressedPath: varchar('compressed_path', { length: 500 }),
+  status: varchar('status', { length: 50 }).default('pending'),
+  errorMessage: text('error_message'),
+  fileSize: integer('file_size'),
+  compressedSize: integer('compressed_size'),
+  outputFormat: varchar('output_format', { length: 20 }),
+  quality: integer('quality'),
+  resizePercentage: integer('resize_percentage'),
+  webOptimization: varchar('web_optimization', { length: 50 }),
+  metadata: jsonb('metadata'),
+  compressionSettings: jsonb('compression_settings'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at'),
+  compressionAlgorithm: varchar('compression_algorithm', { length: 50 }).default('standard'),
+  hasTransparency: boolean('has_transparency').default(false),
+  hasAnimation: boolean('has_animation').default(false),
+  isProgressive: boolean('is_progressive').default(false),
+  width: integer('width'),
+  height: integer('height'),
+  inputFormat: varchar('input_format', { length: 20 }),
+  processingTime: integer('processing_time')
 });
 
 export const leadMagnetSignups = pgTable('lead_magnet_signups', {
@@ -121,20 +143,44 @@ export const appSettings = pgTable('app_Settings', {
 
 export const operationLog = pgTable('operation_Log', {
   id: serial('id').primaryKey(),
-  referrerId: integer('referrer_id'),
-  referredId: integer('referred_id'),
-  code: varchar('code', { length: 100 }),
-  status: varchar('status', { length: 50 }),
+  userId: varchar('user_id', { length: 255 }),
+  sessionId: varchar('session_id', { length: 255 }),
+  operationType: varchar('operation_type', { length: 50 }), // 'regular' or 'raw'
+  fileFormat: varchar('file_format', { length: 20 }), // e.g., 'jpg', 'cr2'
+  fileSizeMb: integer('file_size_mb'),
+  pageIdentifier: varchar('page_identifier', { length: 100 }),
+  wasBypassed: boolean('was_bypassed').default(false),
+  bypassReason: varchar('bypass_reason', { length: 255 }),
+  actedByAdminId: varchar('acted_by_admin_id', { length: 255 }),
   createdAt: timestamp('created_at').defaultNow()
 });
 
-export const userUsage = pgTable('user_Usage', {
+export const userUsage = pgTable('userUsage', {
   id: serial('id').primaryKey(),
-  referrerId: integer('referrer_id'),
-  referredId: integer('referred_id'),
-  code: varchar('code', { length: 100 }),
-  status: varchar('status', { length: 50 }),
-  createdAt: timestamp('created_at').defaultNow()
+  userId: varchar('user_id', { length: 255 }), // Can be 'anonymous' for guest users
+  sessionId: varchar('session_id', { length: 255 }),
+  
+  // Regular image counters
+  regularHourly: integer('regular_hourly').default(0),
+  regularDaily: integer('regular_daily').default(0),
+  regularMonthly: integer('regular_monthly').default(0),
+  
+  // RAW image counters  
+  rawHourly: integer('raw_hourly').default(0),
+  rawDaily: integer('raw_daily').default(0),
+  rawMonthly: integer('raw_monthly').default(0),
+  
+  // Bandwidth tracking
+  monthlyBandwidthMb: integer('monthly_bandwidth_mb').default(0),
+  
+  // Reset timestamps
+  hourlyResetAt: timestamp('hourly_reset_at').defaultNow(),
+  dailyResetAt: timestamp('daily_reset_at').defaultNow(),
+  monthlyResetAt: timestamp('monthly_reset_at').defaultNow(),
+  
+  // Metadata
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow()
 });
 
 export const paymentTransactions = pgTable('payment_Transactions', {
@@ -208,6 +254,16 @@ export const specialFormatTrials = pgTable('special_FormatTrials', {
   status: varchar('status', { length: 50 }),
   createdAt: timestamp('created_at').defaultNow()
 });
+
+// Type exports
+export type User = typeof users.$inferSelect;
+export type UpsertUser = typeof users.$inferInsert;
+export type CompressionJob = typeof compressionJobs.$inferSelect;
+export type InsertCompressionJob = typeof compressionJobs.$inferInsert;
+export type UserUsage = typeof userUsage.$inferSelect;
+export type InsertUserUsage = typeof userUsage.$inferInsert;
+export type OperationLog = typeof operationLog.$inferSelect;
+export type InsertOperationLog = typeof operationLog.$inferInsert;
 
 
 

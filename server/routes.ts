@@ -1024,9 +1024,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             userId,
             sessionId,
             originalFilename: file.originalname,
-            originalSize: file.size,
             originalPath,
-            originalFormat,
             status: 'uploaded' // New status for uploaded but not processed
           });
 
@@ -1102,11 +1100,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Check usage limits for compressions
       for (const job of jobs) {
-        const usageCheck = await UsageTracker.checkLimit(user, req, 1, false);
+        const dualTracker = new DualUsageTracker(userId, sessionId, userType);
+        const usageCheck = await dualTracker.canPerformOperation(job.originalFilename, job.fileSize || 0, pageIdentifier);
         if (!usageCheck.allowed) {
           return res.status(429).json({
             error: "Usage limit exceeded",
-            message: usageCheck.message || "You have reached your compression limit",
+            message: "You have reached your compression limit",
             usage: usageCheck.usage
           });
         }
@@ -1420,17 +1419,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             userId: user?.id || null,
             sessionId: req.sessionID, // For guest users
             originalFilename: file.originalname,
-            originalSize: file.size,
             status: "pending",
-            qualityLevel: "custom",
-            resizeOption: settings.resizeOption,
             outputFormat: outputFormat,
             originalPath: file.path,
-            originalFormat: file.mimetype.split('/')[1], // Add required field
-            compressedSize: null,
-            compressionRatio: null,
-            errorMessage: null,
-            compressedPath: null,
           });
           
           console.log(`Created job ${job.id} for user ${user?.id || 'guest'}`);
@@ -2123,9 +2114,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Check before processing
   app.post('/api/check-operation', async (req, res) => {
     try {
+      console.log('🔧 /api/check-operation called with:', req.body);
+      
       const { filename, fileSize, pageIdentifier } = req.body;
       const sessionId = req.sessionID;
       const userId = req.user?.id;
+      
+      console.log('🔧 Check operation params:', { 
+        filename, 
+        fileSize, 
+        pageIdentifier: pageIdentifier || 'not provided',
+        sessionId, 
+        userId: userId || 'anonymous' 
+      });
       
       let userType = 'anonymous';
       if (userId) {
@@ -2138,12 +2139,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      console.log('🔧 Determined userType:', userType);
+      
       const tracker = new DualUsageTracker(userId, sessionId, userType);
+      
+      console.log('🔧 About to call canPerformOperation...');
       const result = await tracker.canPerformOperation(filename, fileSize, pageIdentifier);
       
+      console.log('🔧 canPerformOperation result:', result);
       res.json(result);
     } catch (error) {
       console.error("Error in /api/check-operation:", error);
+      console.error("Error stack:", error instanceof Error ? error.stack : 'No stack trace');
       res.status(500).json({ 
         message: "Internal server error",
         allowed: false,
@@ -3635,10 +3642,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const job = await storage.createCompressionJob({
           userId, // Add userId for user association
           originalFilename: file.originalname,
-          originalSize: file.size,
           status: "pending",
-          qualityLevel,
-          resizeOption,
           outputFormat,
           originalPath: file.path,
           compressedSize: null,
@@ -4200,10 +4204,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (const file of files) {
         const job = await storage.createCompressionJob({
           originalFilename: file.originalname,
-          originalSize: file.size,
           status: "pending",
-          qualityLevel: "custom",
-          resizeOption: "none",
           outputFormat: "jpeg",
           originalPath: file.path,
           compressedSize: null,
