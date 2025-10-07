@@ -81,7 +81,7 @@ app.use((req, res, next) => {
   console.log('🚀 Starting in production mode - serving static files');
   serveStatic(app);
 
-  const port = parseInt(process.env.PORT || '5000', 10);
+  const port = parseInt(process.env.PORT || '3000', 10);
   const hostname = '0.0.0.0';
 
   const server = httpServer.listen(port, hostname, () => {

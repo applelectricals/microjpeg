@@ -36,7 +36,7 @@ COPY --from=builder /app/server-dist ./server-dist
 # Copy static assets needed by the application
 COPY --from=builder /app/attached_assets ./attached_assets
 
-EXPOSE 5000
+EXPOSE 3000
 
 # Set production environment (this will be overridden by Coolify at runtime)
 ENV NODE_ENV=production

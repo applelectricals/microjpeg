@@ -1,0 +1,18 @@
+Build Pack - Dockerfile
+Domains - microjpeg.com
+Port Exposes - 3000
+
+Container labels
+traefik.enable=true
+traefik.http.middlewares.gzip.compress=true
+traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
+traefik.http.routers.http-0-hsksc4cs80s8kko8cg40cook.entryPoints=http
+traefik.http.routers.http-0-hsksc4cs80s8kko8cg40cook.middlewares=redirect-to-https@docker
+traefik.http.routers.http-0-hsksc4cs80s8kko8cg40cook.rule=Host(`microjpeg.com`) || Host(`www.microjpeg.com`)
+traefik.http.routers.http-0-hsksc4cs80s8kko8cg40cook.service=http-0-hsksc4cs80s8kko8cg40cook
+traefik.http.routers.https-0-hsksc4cs80s8kko8cg40cook.entryPoints=https
+traefik.http.routers.https-0-hsksc4cs80s8kko8cg40cook.rule=Host(`microjpeg.com`) || Host(`www.microjpeg.com`)
+traefik.http.routers.https-0-hsksc4cs80s8kko8cg40cook.tls=true
+traefik.http.routers.https-0-hsksc4cs80s8kko8cg40cook.tls.certresolver=letsencrypt
+traefik.http.routers.https-0-hsksc4cs80s8kko8cg40cook.service=http-0-hsksc4cs80s8kko8cg40cook
+traefik.http.services.http-0-hsksc4cs80s8kko8cg40cook.loadbalancer.server.port=3000
