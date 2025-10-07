@@ -89,10 +89,32 @@ var init_schema = __esm({
       createdAt: (0, import_pg_core.timestamp)("created_at").defaultNow()
     });
     compressionJobs = (0, import_pg_core.pgTable)("compression_jobs", {
-      id: (0, import_pg_core.serial)("id").primaryKey(),
-      userId: (0, import_pg_core.integer)("user_id"),
-      status: (0, import_pg_core.varchar)("status", { length: 50 }),
-      createdAt: (0, import_pg_core.timestamp)("created_at").defaultNow()
+      id: (0, import_pg_core.varchar)("id", { length: 255 }).primaryKey(),
+      userId: (0, import_pg_core.varchar)("user_id", { length: 255 }),
+      sessionId: (0, import_pg_core.varchar)("session_id", { length: 255 }),
+      originalFilename: (0, import_pg_core.varchar)("original_filename", { length: 255 }).notNull(),
+      originalPath: (0, import_pg_core.varchar)("original_path", { length: 500 }),
+      compressedPath: (0, import_pg_core.varchar)("compressed_path", { length: 500 }),
+      status: (0, import_pg_core.varchar)("status", { length: 50 }).default("pending"),
+      errorMessage: (0, import_pg_core.text)("error_message"),
+      fileSize: (0, import_pg_core.integer)("file_size"),
+      compressedSize: (0, import_pg_core.integer)("compressed_size"),
+      outputFormat: (0, import_pg_core.varchar)("output_format", { length: 20 }),
+      quality: (0, import_pg_core.integer)("quality"),
+      resizePercentage: (0, import_pg_core.integer)("resize_percentage"),
+      webOptimization: (0, import_pg_core.varchar)("web_optimization", { length: 50 }),
+      metadata: (0, import_pg_core.jsonb)("metadata"),
+      compressionSettings: (0, import_pg_core.jsonb)("compression_settings"),
+      createdAt: (0, import_pg_core.timestamp)("created_at").defaultNow(),
+      updatedAt: (0, import_pg_core.timestamp)("updated_at"),
+      compressionAlgorithm: (0, import_pg_core.varchar)("compression_algorithm", { length: 50 }).default("standard"),
+      hasTransparency: (0, import_pg_core.boolean)("has_transparency").default(false),
+      hasAnimation: (0, import_pg_core.boolean)("has_animation").default(false),
+      isProgressive: (0, import_pg_core.boolean)("is_progressive").default(false),
+      width: (0, import_pg_core.integer)("width"),
+      height: (0, import_pg_core.integer)("height"),
+      inputFormat: (0, import_pg_core.varchar)("input_format", { length: 20 }),
+      processingTime: (0, import_pg_core.integer)("processing_time")
     });
     leadMagnetSignups = (0, import_pg_core.pgTable)("lead_magnet_signups", {
       id: (0, import_pg_core.serial)("id").primaryKey(),
@@ -169,19 +191,41 @@ var init_schema = __esm({
     });
     operationLog2 = (0, import_pg_core.pgTable)("operation_Log", {
       id: (0, import_pg_core.serial)("id").primaryKey(),
-      referrerId: (0, import_pg_core.integer)("referrer_id"),
-      referredId: (0, import_pg_core.integer)("referred_id"),
-      code: (0, import_pg_core.varchar)("code", { length: 100 }),
-      status: (0, import_pg_core.varchar)("status", { length: 50 }),
+      userId: (0, import_pg_core.varchar)("user_id", { length: 255 }),
+      sessionId: (0, import_pg_core.varchar)("session_id", { length: 255 }),
+      operationType: (0, import_pg_core.varchar)("operation_type", { length: 50 }),
+      // 'regular' or 'raw'
+      fileFormat: (0, import_pg_core.varchar)("file_format", { length: 20 }),
+      // e.g., 'jpg', 'cr2'
+      fileSizeMb: (0, import_pg_core.integer)("file_size_mb"),
+      pageIdentifier: (0, import_pg_core.varchar)("page_identifier", { length: 100 }),
+      wasBypassed: (0, import_pg_core.boolean)("was_bypassed").default(false),
+      bypassReason: (0, import_pg_core.varchar)("bypass_reason", { length: 255 }),
+      actedByAdminId: (0, import_pg_core.varchar)("acted_by_admin_id", { length: 255 }),
       createdAt: (0, import_pg_core.timestamp)("created_at").defaultNow()
     });
-    userUsage = (0, import_pg_core.pgTable)("user_Usage", {
+    userUsage = (0, import_pg_core.pgTable)("userUsage", {
       id: (0, import_pg_core.serial)("id").primaryKey(),
-      referrerId: (0, import_pg_core.integer)("referrer_id"),
-      referredId: (0, import_pg_core.integer)("referred_id"),
-      code: (0, import_pg_core.varchar)("code", { length: 100 }),
-      status: (0, import_pg_core.varchar)("status", { length: 50 }),
-      createdAt: (0, import_pg_core.timestamp)("created_at").defaultNow()
+      userId: (0, import_pg_core.varchar)("user_id", { length: 255 }),
+      // Can be 'anonymous' for guest users
+      sessionId: (0, import_pg_core.varchar)("session_id", { length: 255 }),
+      // Regular image counters
+      regularHourly: (0, import_pg_core.integer)("regular_hourly").default(0),
+      regularDaily: (0, import_pg_core.integer)("regular_daily").default(0),
+      regularMonthly: (0, import_pg_core.integer)("regular_monthly").default(0),
+      // RAW image counters  
+      rawHourly: (0, import_pg_core.integer)("raw_hourly").default(0),
+      rawDaily: (0, import_pg_core.integer)("raw_daily").default(0),
+      rawMonthly: (0, import_pg_core.integer)("raw_monthly").default(0),
+      // Bandwidth tracking
+      monthlyBandwidthMb: (0, import_pg_core.integer)("monthly_bandwidth_mb").default(0),
+      // Reset timestamps
+      hourlyResetAt: (0, import_pg_core.timestamp)("hourly_reset_at").defaultNow(),
+      dailyResetAt: (0, import_pg_core.timestamp)("daily_reset_at").defaultNow(),
+      monthlyResetAt: (0, import_pg_core.timestamp)("monthly_reset_at").defaultNow(),
+      // Metadata
+      createdAt: (0, import_pg_core.timestamp)("created_at").defaultNow(),
+      updatedAt: (0, import_pg_core.timestamp)("updated_at").defaultNow()
     });
     paymentTransactions = (0, import_pg_core.pgTable)("payment_Transactions", {
       id: (0, import_pg_core.serial)("id").primaryKey(),
@@ -314,8 +358,50 @@ var init_storage = __esm({
         return user;
       }
       async createCompressionJob(insertJob) {
-        const [job] = await db.insert(compressionJobs).values(insertJob).returning();
-        return job;
+        try {
+          const minimalJob = {
+            id: insertJob.id || `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            originalFilename: insertJob.originalFilename,
+            status: insertJob.status || "pending",
+            ...insertJob.userId && { userId: insertJob.userId },
+            ...insertJob.sessionId && { sessionId: insertJob.sessionId },
+            ...insertJob.outputFormat && { outputFormat: insertJob.outputFormat },
+            ...insertJob.originalPath && { originalPath: insertJob.originalPath }
+          };
+          const [job] = await db.insert(compressionJobs).values(minimalJob).returning();
+          return job;
+        } catch (error) {
+          console.error("Error creating compression job:", error);
+          const fallbackJob = {
+            id: insertJob.id || `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            originalFilename: insertJob.originalFilename,
+            status: insertJob.status || "pending",
+            userId: insertJob.userId || null,
+            sessionId: insertJob.sessionId || null,
+            outputFormat: insertJob.outputFormat || null,
+            originalPath: insertJob.originalPath || null,
+            compressedPath: null,
+            errorMessage: null,
+            fileSize: null,
+            compressedSize: null,
+            quality: null,
+            resizePercentage: null,
+            webOptimization: null,
+            metadata: null,
+            compressionSettings: null,
+            createdAt: /* @__PURE__ */ new Date(),
+            updatedAt: null,
+            compressionAlgorithm: null,
+            hasTransparency: false,
+            hasAnimation: false,
+            isProgressive: false,
+            width: null,
+            height: null,
+            inputFormat: null,
+            processingTime: null
+          };
+          return fallbackJob;
+        }
       }
       async getCompressionJob(id) {
         const [job] = await db.select().from(compressionJobs).where((0, import_drizzle_orm.eq)(compressionJobs.id, id));
@@ -914,168 +1000,19 @@ var init_operationLimits = __esm({
   }
 });
 
-// server/superuser.ts
-async function logAdminAction(adminUserId, action, targetUserId, targetSessionId, details = {}, ipAddress, userAgent) {
-  try {
-    await db.insert(adminAuditLogs).values({
-      adminUserId,
-      action,
-      targetUserId,
-      targetSessionId,
-      details,
-      ipAddress,
-      userAgent
-    });
-  } catch (error) {
-    console.error("Failed to log admin action:", error);
-  }
-}
-async function getAppSettings() {
-  const now = Date.now();
-  if (cachedAppSettings && now - settingsCacheTime < CACHE_DURATION) {
-    return cachedAppSettings;
-  }
-  try {
-    const [settings] = await db.select().from(appSettings).limit(1);
-    const result = {
-      countersEnforcement: settings?.countersEnforcement || { hourly: true, daily: true, monthly: true },
-      adminUiEnabled: settings?.adminUiEnabled || ADMIN_UI_ENABLED,
-      superuserBypassEnabled: settings?.superuserBypassEnabled || false
-    };
-    cachedAppSettings = result;
-    settingsCacheTime = now;
-    return result;
-  } catch (error) {
-    console.error("Failed to get app settings:", error);
-    return {
-      countersEnforcement: { hourly: true, daily: true, monthly: true },
-      adminUiEnabled: ADMIN_UI_ENABLED,
-      superuserBypassEnabled: false
-    };
-  }
-}
-async function updateAppSettings(updates, updatedBy) {
-  try {
-    const currentSettings = await getAppSettings();
-    const newEnforcement = {
-      ...currentSettings.countersEnforcement,
-      ...updates.countersEnforcement
-    };
-    const [existingSettings] = await db.select().from(appSettings).limit(1);
-    if (existingSettings) {
-      await db.update(appSettings).set({
-        countersEnforcement: newEnforcement,
-        adminUiEnabled: updates.adminUiEnabled ?? currentSettings.adminUiEnabled,
-        superuserBypassEnabled: updates.superuserBypassEnabled ?? currentSettings.superuserBypassEnabled,
-        updatedAt: /* @__PURE__ */ new Date(),
-        updatedBy
-      }).where((0, import_drizzle_orm2.eq)(appSettings.id, existingSettings.id));
-    } else {
-      await db.insert(appSettings).values({
-        countersEnforcement: newEnforcement,
-        adminUiEnabled: updates.adminUiEnabled ?? currentSettings.adminUiEnabled,
-        superuserBypassEnabled: updates.superuserBypassEnabled ?? currentSettings.superuserBypassEnabled,
-        updatedBy
-      });
-    }
-    cachedAppSettings = null;
-    console.log("\u2705 App settings updated:", updates);
-  } catch (error) {
-    console.error("Failed to update app settings:", error);
-    throw error;
-  }
-}
-async function hasSuperuserBypass(req) {
-  try {
-    const session4 = req.session;
-    if (!session4?.superBypassEnabled) {
-      return false;
-    }
-    if (!session4.userId) {
-      return false;
-    }
-    const [user] = await db.select().from(users).where((0, import_drizzle_orm2.eq)(users.id, session4.userId));
-    if (!user || !user.isSuperuser) {
-      console.warn(`\u{1F6A8} Session ${session4.userId} has bypass enabled but user is not superuser`);
-      return false;
-    }
-    const appSettings2 = await getAppSettings();
-    if (!appSettings2.superuserBypassEnabled) {
-      return false;
-    }
-    return true;
-  } catch (error) {
-    console.error("Error checking superuser bypass:", error);
-    return false;
-  }
-}
-function setSuperuserBypass(req, enabled, reason) {
-  const session4 = req.session;
-  session4.superBypassEnabled = enabled;
-  if (enabled && reason) {
-    session4.superBypassReason = reason;
-  } else {
-    delete session4.superBypassReason;
-  }
-}
-var import_bcryptjs, import_drizzle_orm2, SUPERUSER_EMAIL, SUPERUSER_PASSWORD, ADMIN_UI_ENABLED, ADMIN_SEED_TOKEN, ensureSuperuser, cachedAppSettings, settingsCacheTime, CACHE_DURATION;
-var init_superuser = __esm({
-  "server/superuser.ts"() {
-    "use strict";
-    import_bcryptjs = __toESM(require("bcryptjs"), 1);
-    import_drizzle_orm2 = require("drizzle-orm");
-    init_db();
-    init_schema();
-    SUPERUSER_EMAIL = process.env.SUPERUSER_EMAIL || "admin@microjpeg.com";
-    SUPERUSER_PASSWORD = process.env.SUPERUSER_PASSWORD || "SuperAdmin123!";
-    ADMIN_UI_ENABLED = process.env.ADMIN_UI_ENABLED === "true";
-    ADMIN_SEED_TOKEN = process.env.ADMIN_SEED_TOKEN || "dev-seed-token-2025";
-    ensureSuperuser = async (req, res, next) => {
-      try {
-        const session4 = req.session;
-        if (!session4.userId) {
-          return res.status(401).json({
-            error: "Authentication required",
-            message: "Please sign in to access admin functions"
-          });
-        }
-        const [user] = await db.select().from(users).where((0, import_drizzle_orm2.eq)(users.id, session4.userId));
-        if (!user || !user.isSuperuser) {
-          return res.status(403).json({
-            error: "Insufficient privileges",
-            message: "Superuser access required"
-          });
-        }
-        req.user = user;
-        next();
-      } catch (error) {
-        console.error("Superuser authentication error:", error);
-        res.status(500).json({
-          error: "Authentication error",
-          message: "Failed to verify superuser status"
-        });
-      }
-    };
-    cachedAppSettings = null;
-    settingsCacheTime = 0;
-    CACHE_DURATION = 3e4;
-  }
-});
-
 // server/services/DualUsageTracker.ts
 var DualUsageTracker_exports = {};
 __export(DualUsageTracker_exports, {
   DualUsageTracker: () => DualUsageTracker
 });
-var import_drizzle_orm3, DualUsageTracker;
+var import_drizzle_orm2, DualUsageTracker;
 var init_DualUsageTracker = __esm({
   "server/services/DualUsageTracker.ts"() {
     "use strict";
     init_db();
     init_operationLimits();
     init_schema();
-    import_drizzle_orm3 = require("drizzle-orm");
-    init_superuser();
+    import_drizzle_orm2 = require("drizzle-orm");
     DualUsageTracker = class {
       userId;
       sessionId;
@@ -1089,205 +1026,255 @@ var init_DualUsageTracker = __esm({
       }
       // Check if operation is allowed with bypass support
       async canPerformOperation(filename, fileSize, pageIdentifier) {
-        const fileType = getFileType(filename);
-        if (fileType === "unknown") {
-          return {
-            allowed: false,
-            reason: "Unsupported file format"
-          };
-        }
-        if (this.auditContext?.superBypass) {
-          console.log("\u{1F513} Superuser bypass: Operation allowed without limit checks");
+        try {
+          console.log("\u{1F527} DualUsageTracker.canPerformOperation called:", { filename, fileSize, pageIdentifier, userType: this.userType });
+          const fileType = getFileType(filename);
+          if (fileType === "unknown") {
+            return {
+              allowed: false,
+              reason: "Unsupported file format. Please upload JPG, PNG, WEBP, AVIF, SVG, TIFF or RAW files (CR2, ARW, DNG, NEF, ORF, RAF, RW2, CRW)."
+            };
+          }
+          if (this.auditContext?.superBypass) {
+            console.log("\u{1F513} Superuser bypass: Operation allowed without limit checks");
+            return {
+              allowed: true,
+              reason: "superuser_bypass",
+              wasBypassed: true
+            };
+          }
+          let maxSize = OPERATION_CONFIG.maxFileSize[fileType][this.userType];
+          if (pageIdentifier && pageIdentifier.includes("convert") && fileType === "raw" && this.userType === "anonymous") {
+            maxSize = 25 * 1024 * 1024;
+          }
+          if (fileSize > maxSize) {
+            const maxMB = Math.round(maxSize / 1024 / 1024);
+            const currentMB = Math.round(fileSize / 1024 / 1024);
+            let upgradeMessage = "";
+            if (this.userType === "anonymous") {
+              upgradeMessage = " Upgrade to Premium for up to 50MB files or Enterprise for up to 200MB files.";
+            } else if (this.userType === "free") {
+              upgradeMessage = " Upgrade to Premium for up to 50MB files or Enterprise for up to 200MB files.";
+            } else if (this.userType === "premium") {
+              upgradeMessage = " Upgrade to Enterprise for up to 200MB files.";
+            }
+            return {
+              allowed: false,
+              reason: `File size (${currentMB}MB) exceeds the ${maxMB}MB limit.${upgradeMessage}`
+            };
+          }
+          const usage = await this.getCurrentUsage();
+          const limits = this.getLimits(fileType, pageIdentifier);
+          if (fileType === "raw") {
+            if (usage.rawHourly >= limits.hourly) {
+              return {
+                allowed: false,
+                reason: `Hourly RAW limit reached (${limits.hourly}). Try again in ${Math.ceil((new Date(usage.hourlyResetAt).getTime() - Date.now()) / 6e4)} minutes.`,
+                usage,
+                limits
+              };
+            }
+            if (usage.rawDaily >= limits.daily) {
+              return {
+                allowed: false,
+                reason: `Daily RAW limit reached (${limits.daily}). Resets at midnight.`,
+                usage,
+                limits
+              };
+            }
+            if (usage.rawMonthly >= limits.monthly) {
+              return {
+                allowed: false,
+                reason: `Monthly RAW limit reached (${limits.monthly}). Upgrade for higher limits.`,
+                usage,
+                limits
+              };
+            }
+          } else {
+            if (usage.regularHourly >= limits.hourly) {
+              return {
+                allowed: false,
+                reason: `Hourly limit reached (${limits.hourly}). Try again in ${Math.ceil((new Date(usage.hourlyResetAt).getTime() - Date.now()) / 6e4)} minutes.`,
+                usage,
+                limits
+              };
+            }
+            if (usage.regularDaily >= limits.daily) {
+              return {
+                allowed: false,
+                reason: `Daily limit reached (${limits.daily}). Resets at midnight.`,
+                usage,
+                limits
+              };
+            }
+            if (usage.regularMonthly >= limits.monthly) {
+              return {
+                allowed: false,
+                reason: `Monthly limit reached (${limits.monthly}). Upgrade for higher limits.`,
+                usage,
+                limits
+              };
+            }
+          }
+          console.log("\u2705 Operation allowed within limits");
           return {
             allowed: true,
-            reason: "superuser_bypass",
+            usage,
+            limits
+          };
+        } catch (error) {
+          console.error("Error in canPerformOperation:", error);
+          return {
+            allowed: true,
+            reason: "error_fallback",
             wasBypassed: true
           };
         }
-        const appSettings2 = await getAppSettings();
-        const enforceHourly = appSettings2.countersEnforcement.hourly;
-        const enforceDaily = appSettings2.countersEnforcement.daily;
-        const enforceMonthly = appSettings2.countersEnforcement.monthly;
-        if (!enforceHourly && !enforceDaily && !enforceMonthly) {
-          console.log("\u26A0\uFE0F Global enforcement disabled: Operation allowed");
-          return {
-            allowed: true,
-            reason: "enforcement_disabled",
-            wasBypassed: true
-          };
-        }
-        const maxSize = OPERATION_CONFIG.maxFileSize[fileType][this.userType];
-        if (fileSize > maxSize) {
-          return {
-            allowed: false,
-            reason: `File too large. Maximum ${Math.round(maxSize / 1024 / 1024)}MB for ${fileType} files.`
-          };
-        }
-        const usage = await this.getCurrentUsage();
-        const limits = this.getLimits(fileType, pageIdentifier);
-        if (fileType === "raw") {
-          if (enforceHourly && usage.rawHourly >= limits.hourly) {
-            return {
-              allowed: false,
-              reason: `Hourly RAW limit reached (${limits.hourly})`,
-              usage,
-              limits
-            };
-          }
-          if (enforceDaily && usage.rawDaily >= limits.daily) {
-            return {
-              allowed: false,
-              reason: `Daily RAW limit reached (${limits.daily})`,
-              usage,
-              limits
-            };
-          }
-          if (enforceMonthly && usage.rawMonthly >= limits.monthly) {
-            return {
-              allowed: false,
-              reason: `Monthly RAW limit reached (${limits.monthly})`,
-              usage,
-              limits
-            };
-          }
-        } else {
-          if (enforceHourly && usage.regularHourly >= limits.hourly) {
-            return {
-              allowed: false,
-              reason: `Hourly limit reached (${limits.hourly})`,
-              usage,
-              limits
-            };
-          }
-          if (enforceDaily && usage.regularDaily >= limits.daily) {
-            return {
-              allowed: false,
-              reason: `Daily limit reached (${limits.daily})`,
-              usage,
-              limits
-            };
-          }
-          if (enforceMonthly && usage.regularMonthly >= limits.monthly) {
-            return {
-              allowed: false,
-              reason: `Monthly limit reached (${limits.monthly})`,
-              usage,
-              limits
-            };
-          }
-        }
-        return {
-          allowed: true,
-          usage,
-          limits
-        };
       }
-      // Record successful operation with audit trail
+      // Record successful operation with audit trail (with database fallback)
       async recordOperation(filename, fileSize, pageIdentifier) {
-        const fileType = getFileType(filename);
-        if (fileType === "unknown") {
-          return;
-        }
-        const validFileSize = isNaN(fileSize) || fileSize < 0 ? 0 : fileSize;
-        await this.incrementUsage(fileType);
-        const wasBypassed = this.auditContext?.superBypass || false;
-        await db.insert(operationLog2).values({
-          userId: this.userId || null,
-          sessionId: this.sessionId,
-          operationType: fileType,
-          fileFormat: filename.split(".").pop() || "",
-          fileSizeMb: Math.round(validFileSize / 1024 / 1024),
-          pageIdentifier,
-          wasBypassed,
-          bypassReason: this.auditContext?.bypassReason || null,
-          actedByAdminId: this.auditContext?.adminUserId || null
-        });
-        if (wasBypassed) {
-          console.log(`\u{1F4DD} Operation logged with bypass: ${fileType} file by ${this.auditContext?.adminUserId || "system"}`);
+        try {
+          console.log("\u{1F4DD} DualUsageTracker.recordOperation called:", { filename, fileSize, pageIdentifier, userType: this.userType });
+          const fileType = getFileType(filename);
+          if (fileType === "unknown") {
+            console.log("\u26A0\uFE0F Skipping record of unknown file type");
+            return;
+          }
+          const validFileSize = isNaN(fileSize) || fileSize < 0 ? 0 : fileSize;
+          await this.incrementUsage(fileType);
+          const wasBypassed = this.auditContext?.superBypass || false;
+          await db.insert(operationLog2).values({
+            userId: this.userId || "anonymous",
+            sessionId: this.sessionId,
+            operationType: fileType,
+            fileFormat: filename.split(".").pop() || "",
+            fileSizeMb: Math.round(validFileSize / 1024 / 1024),
+            pageIdentifier,
+            wasBypassed,
+            bypassReason: this.auditContext?.bypassReason || null,
+            actedByAdminId: this.auditContext?.adminUserId || null
+          });
+          if (wasBypassed) {
+            console.log(`\u{1F4DD} Operation logged with bypass: ${fileType} file by ${this.auditContext?.adminUserId || "system"}`);
+          }
+        } catch (error) {
+          console.error("Error recording operation (database may not be updated):", error);
+          console.log("\u{1F504} Continuing without operation recording (fallback mode)");
         }
       }
-      // Get current usage with automatic reset
+      // Get current usage with automatic reset (with database fallback)
       async getCurrentUsage() {
-        const now = /* @__PURE__ */ new Date();
-        const usageResult = await db.select().from(userUsage).where((0, import_drizzle_orm3.and)(
-          (0, import_drizzle_orm3.eq)(userUsage.userId, this.userId || "anonymous"),
-          (0, import_drizzle_orm3.eq)(userUsage.sessionId, this.sessionId)
-        )).limit(1);
-        if (!usageResult || usageResult.length === 0) {
-          await db.insert(userUsage).values({
-            userId: this.userId || "anonymous",
-            sessionId: this.sessionId
-          });
+        try {
+          console.log("\u{1F4CA} DualUsageTracker.getCurrentUsage called for:", { userType: this.userType, userId: this.userId });
+          const now = /* @__PURE__ */ new Date();
+          const usageResult = await db.select().from(userUsage).where((0, import_drizzle_orm2.and)(
+            (0, import_drizzle_orm2.eq)(userUsage.userId, this.userId || "anonymous"),
+            (0, import_drizzle_orm2.eq)(userUsage.sessionId, this.sessionId)
+          )).limit(1);
+          if (!usageResult || usageResult.length === 0) {
+            const [newUsage] = await db.insert(userUsage).values({
+              userId: this.userId || "anonymous",
+              sessionId: this.sessionId,
+              regularHourly: 0,
+              regularDaily: 0,
+              regularMonthly: 0,
+              rawHourly: 0,
+              rawDaily: 0,
+              rawMonthly: 0,
+              monthlyBandwidthMb: 0,
+              hourlyResetAt: new Date(now.getTime() + 60 * 60 * 1e3),
+              // 1 hour from now
+              dailyResetAt: new Date(now.getTime() + 24 * 60 * 60 * 1e3),
+              // 1 day from now
+              monthlyResetAt: new Date(now.getFullYear(), now.getMonth() + 1, 1)
+              // Next month
+            }).returning();
+            return newUsage;
+          }
+          const usage = usageResult[0];
+          const hourlyReset = new Date(usage.hourlyResetAt || /* @__PURE__ */ new Date());
+          const dailyReset = new Date(usage.dailyResetAt || /* @__PURE__ */ new Date());
+          const monthlyReset = new Date(usage.monthlyResetAt || /* @__PURE__ */ new Date());
+          let updateData = {};
+          let needsUpdate = false;
+          if (now.getTime() - hourlyReset.getTime() > 36e5) {
+            updateData.regularHourly = 0;
+            updateData.rawHourly = 0;
+            updateData.hourlyResetAt = now;
+            usage.regularHourly = 0;
+            usage.rawHourly = 0;
+            needsUpdate = true;
+          }
+          if (now.getTime() - dailyReset.getTime() > 864e5) {
+            updateData.regularDaily = 0;
+            updateData.rawDaily = 0;
+            updateData.dailyResetAt = now;
+            usage.regularDaily = 0;
+            usage.rawDaily = 0;
+            needsUpdate = true;
+          }
+          if (now.getTime() - monthlyReset.getTime() > 2592e6) {
+            updateData.regularMonthly = 0;
+            updateData.rawMonthly = 0;
+            updateData.monthlyBandwidthMb = 0;
+            updateData.monthlyResetAt = now;
+            usage.regularMonthly = 0;
+            usage.rawMonthly = 0;
+            needsUpdate = true;
+          }
+          if (needsUpdate) {
+            await db.update(userUsage).set(updateData).where((0, import_drizzle_orm2.and)(
+              (0, import_drizzle_orm2.eq)(userUsage.userId, this.userId || "anonymous"),
+              (0, import_drizzle_orm2.eq)(userUsage.sessionId, this.sessionId)
+            ));
+          }
+          return usage;
+        } catch (error) {
+          console.error("Error getting current usage (database may not be updated):", error);
+          console.log("\u{1F504} Falling back to default usage values");
           return {
-            regularMonthly: 0,
-            regularDaily: 0,
             regularHourly: 0,
-            rawMonthly: 0,
+            regularDaily: 0,
+            regularMonthly: 0,
+            rawHourly: 0,
             rawDaily: 0,
-            rawHourly: 0
+            rawMonthly: 0,
+            monthlyBandwidthMb: 0,
+            hourlyResetAt: /* @__PURE__ */ new Date(),
+            dailyResetAt: /* @__PURE__ */ new Date(),
+            monthlyResetAt: /* @__PURE__ */ new Date()
           };
         }
-        const usage = usageResult[0];
-        const hourlyReset = new Date(usage.hourlyResetAt || /* @__PURE__ */ new Date());
-        const dailyReset = new Date(usage.dailyResetAt || /* @__PURE__ */ new Date());
-        const monthlyReset = new Date(usage.monthlyResetAt || /* @__PURE__ */ new Date());
-        let updateData = {};
-        let needsUpdate = false;
-        if (now.getTime() - hourlyReset.getTime() > 36e5) {
-          updateData.regularHourly = 0;
-          updateData.rawHourly = 0;
-          updateData.hourlyResetAt = now;
-          usage.regularHourly = 0;
-          usage.rawHourly = 0;
-          needsUpdate = true;
-        }
-        if (now.getTime() - dailyReset.getTime() > 864e5) {
-          updateData.regularDaily = 0;
-          updateData.rawDaily = 0;
-          updateData.dailyResetAt = now;
-          usage.regularDaily = 0;
-          usage.rawDaily = 0;
-          needsUpdate = true;
-        }
-        if (now.getTime() - monthlyReset.getTime() > 2592e6) {
-          updateData.regularMonthly = 0;
-          updateData.rawMonthly = 0;
-          updateData.monthlyBandwidthMb = 0;
-          updateData.monthlyResetAt = now;
-          usage.regularMonthly = 0;
-          usage.rawMonthly = 0;
-          needsUpdate = true;
-        }
-        if (needsUpdate) {
-          await db.update(userUsage).set(updateData).where((0, import_drizzle_orm3.and)(
-            (0, import_drizzle_orm3.eq)(userUsage.userId, this.userId || "anonymous"),
-            (0, import_drizzle_orm3.eq)(userUsage.sessionId, this.sessionId)
-          ));
-        }
-        return usage;
       }
-      // Increment usage counters
+      // Increment usage counters (with database fallback)
       async incrementUsage(fileType) {
-        if (fileType === "raw") {
-          await db.update(userUsage).set({
-            rawMonthly: import_drizzle_orm3.sql`${userUsage.rawMonthly} + 1`,
-            rawDaily: import_drizzle_orm3.sql`${userUsage.rawDaily} + 1`,
-            rawHourly: import_drizzle_orm3.sql`${userUsage.rawHourly} + 1`,
-            updatedAt: /* @__PURE__ */ new Date()
-          }).where((0, import_drizzle_orm3.and)(
-            (0, import_drizzle_orm3.eq)(userUsage.userId, this.userId || "anonymous"),
-            (0, import_drizzle_orm3.eq)(userUsage.sessionId, this.sessionId)
-          ));
-        } else {
-          await db.update(userUsage).set({
-            regularMonthly: import_drizzle_orm3.sql`${userUsage.regularMonthly} + 1`,
-            regularDaily: import_drizzle_orm3.sql`${userUsage.regularDaily} + 1`,
-            regularHourly: import_drizzle_orm3.sql`${userUsage.regularHourly} + 1`,
-            updatedAt: /* @__PURE__ */ new Date()
-          }).where((0, import_drizzle_orm3.and)(
-            (0, import_drizzle_orm3.eq)(userUsage.userId, this.userId || "anonymous"),
-            (0, import_drizzle_orm3.eq)(userUsage.sessionId, this.sessionId)
-          ));
+        try {
+          console.log("\u{1F4C8} DualUsageTracker.incrementUsage called:", { fileType, userType: this.userType });
+          if (fileType === "raw") {
+            await db.update(userUsage).set({
+              rawMonthly: import_drizzle_orm2.sql`${userUsage.rawMonthly} + 1`,
+              rawDaily: import_drizzle_orm2.sql`${userUsage.rawDaily} + 1`,
+              rawHourly: import_drizzle_orm2.sql`${userUsage.rawHourly} + 1`,
+              updatedAt: /* @__PURE__ */ new Date()
+            }).where((0, import_drizzle_orm2.and)(
+              (0, import_drizzle_orm2.eq)(userUsage.userId, this.userId || "anonymous"),
+              (0, import_drizzle_orm2.eq)(userUsage.sessionId, this.sessionId)
+            ));
+          } else {
+            await db.update(userUsage).set({
+              regularMonthly: import_drizzle_orm2.sql`${userUsage.regularMonthly} + 1`,
+              regularDaily: import_drizzle_orm2.sql`${userUsage.regularDaily} + 1`,
+              regularHourly: import_drizzle_orm2.sql`${userUsage.regularHourly} + 1`,
+              updatedAt: /* @__PURE__ */ new Date()
+            }).where((0, import_drizzle_orm2.and)(
+              (0, import_drizzle_orm2.eq)(userUsage.userId, this.userId || "anonymous"),
+              (0, import_drizzle_orm2.eq)(userUsage.sessionId, this.sessionId)
+            ));
+          }
+          console.log(`\u2705 Usage incremented: ${fileType} operation for ${this.userType} user`);
+        } catch (error) {
+          console.error("Error incrementing usage (database may not be updated):", error);
+          console.log("\u{1F504} Continuing without usage increment (fallback mode)");
         }
       }
       // Get limits for file type
@@ -3376,7 +3363,7 @@ var import_cors = __toESM(require("cors"), 1);
 // server/routes.ts
 var import_express6 = __toESM(require("express"), 1);
 var import_http = require("http");
-var import_crypto6 = require("crypto");
+var import_crypto5 = require("crypto");
 var import_multer2 = __toESM(require("multer"), 1);
 var import_sharp5 = __toESM(require("sharp"), 1);
 var import_path5 = __toESM(require("path"), 1);
@@ -7695,12 +7682,154 @@ function pageIdentifierMiddleware(req, res, next) {
 // server/routes.ts
 init_DualUsageTracker();
 init_operationLimits();
-init_superuser();
+
+// server/superuser.ts
+var import_bcryptjs = __toESM(require("bcryptjs"), 1);
+var import_drizzle_orm3 = require("drizzle-orm");
+init_db();
+init_schema();
+var SUPERUSER_EMAIL = process.env.SUPERUSER_EMAIL || "admin@microjpeg.com";
+var SUPERUSER_PASSWORD = process.env.SUPERUSER_PASSWORD || "SuperAdmin123!";
+var ADMIN_UI_ENABLED = process.env.ADMIN_UI_ENABLED === "true";
+var ADMIN_SEED_TOKEN = process.env.ADMIN_SEED_TOKEN || "dev-seed-token-2025";
+var ensureSuperuser = async (req, res, next) => {
+  try {
+    const session4 = req.session;
+    if (!session4.userId) {
+      return res.status(401).json({
+        error: "Authentication required",
+        message: "Please sign in to access admin functions"
+      });
+    }
+    const [user] = await db.select().from(users).where((0, import_drizzle_orm3.eq)(users.id, session4.userId));
+    if (!user || !user.isSuperuser) {
+      return res.status(403).json({
+        error: "Insufficient privileges",
+        message: "Superuser access required"
+      });
+    }
+    req.user = user;
+    next();
+  } catch (error) {
+    console.error("Superuser authentication error:", error);
+    res.status(500).json({
+      error: "Authentication error",
+      message: "Failed to verify superuser status"
+    });
+  }
+};
+async function logAdminAction(adminUserId, action, targetUserId, targetSessionId, details = {}, ipAddress, userAgent) {
+  try {
+    await db.insert(adminAuditLogs).values({
+      adminUserId,
+      action,
+      targetUserId,
+      targetSessionId,
+      details,
+      ipAddress,
+      userAgent
+    });
+  } catch (error) {
+    console.error("Failed to log admin action:", error);
+  }
+}
+var cachedAppSettings = null;
+var settingsCacheTime = 0;
+var CACHE_DURATION = 3e4;
+async function getAppSettings() {
+  const now = Date.now();
+  if (cachedAppSettings && now - settingsCacheTime < CACHE_DURATION) {
+    return cachedAppSettings;
+  }
+  try {
+    const [settings] = await db.select().from(appSettings).limit(1);
+    const result = {
+      countersEnforcement: settings?.countersEnforcement || { hourly: true, daily: true, monthly: true },
+      adminUiEnabled: settings?.adminUiEnabled || ADMIN_UI_ENABLED,
+      superuserBypassEnabled: settings?.superuserBypassEnabled || false
+    };
+    cachedAppSettings = result;
+    settingsCacheTime = now;
+    return result;
+  } catch (error) {
+    console.error("Failed to get app settings:", error);
+    return {
+      countersEnforcement: { hourly: true, daily: true, monthly: true },
+      adminUiEnabled: ADMIN_UI_ENABLED,
+      superuserBypassEnabled: false
+    };
+  }
+}
+async function updateAppSettings(updates, updatedBy) {
+  try {
+    const currentSettings = await getAppSettings();
+    const newEnforcement = {
+      ...currentSettings.countersEnforcement,
+      ...updates.countersEnforcement
+    };
+    const [existingSettings] = await db.select().from(appSettings).limit(1);
+    if (existingSettings) {
+      await db.update(appSettings).set({
+        countersEnforcement: newEnforcement,
+        adminUiEnabled: updates.adminUiEnabled ?? currentSettings.adminUiEnabled,
+        superuserBypassEnabled: updates.superuserBypassEnabled ?? currentSettings.superuserBypassEnabled,
+        updatedAt: /* @__PURE__ */ new Date(),
+        updatedBy
+      }).where((0, import_drizzle_orm3.eq)(appSettings.id, existingSettings.id));
+    } else {
+      await db.insert(appSettings).values({
+        countersEnforcement: newEnforcement,
+        adminUiEnabled: updates.adminUiEnabled ?? currentSettings.adminUiEnabled,
+        superuserBypassEnabled: updates.superuserBypassEnabled ?? currentSettings.superuserBypassEnabled,
+        updatedBy
+      });
+    }
+    cachedAppSettings = null;
+    console.log("\u2705 App settings updated:", updates);
+  } catch (error) {
+    console.error("Failed to update app settings:", error);
+    throw error;
+  }
+}
+async function hasSuperuserBypass(req) {
+  try {
+    const session4 = req.session;
+    if (!session4?.superBypassEnabled) {
+      return false;
+    }
+    if (!session4.userId) {
+      return false;
+    }
+    const [user] = await db.select().from(users).where((0, import_drizzle_orm3.eq)(users.id, session4.userId));
+    if (!user || !user.isSuperuser) {
+      console.warn(`\u{1F6A8} Session ${session4.userId} has bypass enabled but user is not superuser`);
+      return false;
+    }
+    const appSettings2 = await getAppSettings();
+    if (!appSettings2.superuserBypassEnabled) {
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error("Error checking superuser bypass:", error);
+    return false;
+  }
+}
+function setSuperuserBypass(req, enabled, reason) {
+  const session4 = req.session;
+  session4.superBypassEnabled = enabled;
+  if (enabled && reason) {
+    session4.superBypassReason = reason;
+  } else {
+    delete session4.superBypassReason;
+  }
+}
+
+// server/routes.ts
 init_schema();
 
 // server/conversionMiddleware.ts
 init_DualUsageTracker();
-init_superuser();
 var PAGE_CONFIGS = {
   // Universal Format Pages (auto-convert to JPG)
   "/": {
@@ -8370,15 +8499,9 @@ var isAuthenticated = async (req, res, next) => {
 };
 
 // server/payment.ts
-var import_razorpay2 = __toESM(require("razorpay"), 1);
 init_db();
 init_schema();
 var import_drizzle_orm5 = require("drizzle-orm");
-var import_crypto4 = __toESM(require("crypto"), 1);
-var razorpayInstance = new import_razorpay2.default({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET
-});
 var PLANS = {
   free: {
     id: "free",
@@ -8409,101 +8532,6 @@ var PLANS = {
     features: ["50,000 operations/month", "200MB file limit", "Custom integrations", "SLA guarantee", "Priority support"]
   }
 };
-async function createRazorpayOrder(req, res) {
-  try {
-    const { plan, amount } = req.body;
-    if (!plan || !PLANS[plan]) {
-      return res.status(400).json({ error: "Invalid plan selected" });
-    }
-    const planConfig = PLANS[plan];
-    const orderAmount = amount || planConfig.price * 100;
-    const options = {
-      amount: orderAmount,
-      currency: "USD",
-      receipt: `order_${Date.now()}_${plan}`,
-      notes: {
-        plan,
-        user_id: req.user?.id || "anonymous"
-      }
-    };
-    const order = await razorpayInstance.orders.create(options);
-    res.json({
-      success: true,
-      order_id: order.id,
-      amount: order.amount,
-      currency: order.currency,
-      key: process.env.VITE_RAZORPAY_KEY_ID
-    });
-  } catch (error) {
-    console.error("Razorpay order creation failed:", error);
-    res.status(500).json({
-      error: "Failed to create payment order",
-      message: error.message
-    });
-  }
-}
-async function verifyRazorpayPayment(req, res) {
-  try {
-    const {
-      razorpay_order_id,
-      razorpay_payment_id,
-      razorpay_signature,
-      plan,
-      billing
-    } = req.body;
-    const body = razorpay_order_id + "|" + razorpay_payment_id;
-    const expectedSignature = import_crypto4.default.createHmac("sha256", process.env.RAZORPAY_KEY_SECRET).update(body.toString()).digest("hex");
-    if (expectedSignature !== razorpay_signature) {
-      return res.status(400).json({ error: "Payment verification failed" });
-    }
-    const userId2 = req.user?.id;
-    if (!userId2) {
-      return res.status(401).json({ error: "User not authenticated" });
-    }
-    const planConfig = PLANS[plan];
-    const subscriptionEndDate = /* @__PURE__ */ new Date();
-    subscriptionEndDate.setMonth(subscriptionEndDate.getMonth() + 1);
-    await db.update(users).set({
-      subscriptionTier: plan,
-      subscriptionStatus: "active",
-      subscriptionStartDate: /* @__PURE__ */ new Date(),
-      subscriptionEndDate,
-      monthlyOperations: 0,
-      // Reset operations count
-      updatedAt: /* @__PURE__ */ new Date()
-    }).where((0, import_drizzle_orm5.eq)(users.id, userId2));
-    await db.insert(paymentTransactions).values({
-      userId: userId2,
-      amount: planConfig.price,
-      currency: "USD",
-      paymentMethod: "razorpay",
-      paymentId: razorpay_payment_id,
-      orderId: razorpay_order_id,
-      status: "completed",
-      plan,
-      billingDetails: JSON.stringify(billing)
-    });
-    const [user] = await db.select().from(users).where((0, import_drizzle_orm5.eq)(users.id, userId2));
-    if (user?.email) {
-      console.log(`Payment confirmed for ${user.email} - Plan: ${planConfig.name}, Amount: $${planConfig.price}`);
-    }
-    res.json({
-      success: true,
-      message: "Payment verified and subscription updated",
-      subscription: {
-        plan: planConfig.name,
-        operations: planConfig.operations,
-        features: planConfig.features
-      }
-    });
-  } catch (error) {
-    console.error("Payment verification failed:", error);
-    res.status(500).json({
-      error: "Payment verification failed",
-      message: error.message
-    });
-  }
-}
 async function processPayPalPayment(req, res) {
   try {
     const { plan, paypal_payment_id, billing } = req.body;
@@ -8968,7 +8996,7 @@ var import_fs3 = require("fs");
 var import_path3 = __toESM(require("path"), 1);
 
 // server/apiAuth.ts
-var import_crypto5 = __toESM(require("crypto"), 1);
+var import_crypto4 = __toESM(require("crypto"), 1);
 var import_bcryptjs3 = __toESM(require("bcryptjs"), 1);
 init_db();
 init_schema();
@@ -9332,7 +9360,7 @@ var ApiKeyManager = class {
    * Generate a new API key with proper formatting
    */
   static generateApiKey() {
-    const randomBytes = import_crypto5.default.randomBytes(24).toString("hex");
+    const randomBytes = import_crypto4.default.randomBytes(24).toString("hex");
     const fullKey = `sk_test_${randomBytes}`;
     const keyHash = import_bcryptjs3.default.hashSync(fullKey, 10);
     const keyPrefix = fullKey.substring(0, 15);
@@ -11710,16 +11738,14 @@ async function registerRoutes(app2) {
       console.log(`Creating ${files.length} upload jobs for user ${userId2 || "guest"}`);
       for (const file of files) {
         try {
-          const jobId = (0, import_crypto6.randomUUID)();
+          const jobId = (0, import_crypto5.randomUUID)();
           const originalPath = file.path;
           const originalFormat = file.originalname.split(".").pop()?.toLowerCase() || "unknown";
           const job = await storage.createCompressionJob({
             userId: userId2,
             sessionId,
             originalFilename: file.originalname,
-            originalSize: file.size,
             originalPath,
-            originalFormat,
             status: "uploaded"
             // New status for uploaded but not processed
           });
@@ -11777,11 +11803,12 @@ async function registerRoutes(app2) {
         return res.status(404).json({ error: "No valid jobs found to process" });
       }
       for (const job of jobs) {
-        const usageCheck = await UsageTracker.checkLimit(user2, req, 1, false);
+        const dualTracker = new DualUsageTracker(userId2, sessionId, userType);
+        const usageCheck = await dualTracker.canPerformOperation(job.originalFilename, job.fileSize || 0, pageIdentifier);
         if (!usageCheck.allowed) {
           return res.status(429).json({
             error: "Usage limit exceeded",
-            message: usageCheck.message || "You have reached your compression limit",
+            message: "You have reached your compression limit",
             usage: usageCheck.usage
           });
         }
@@ -12018,18 +12045,9 @@ async function registerRoutes(app2) {
             sessionId: req.sessionID,
             // For guest users
             originalFilename: file.originalname,
-            originalSize: file.size,
             status: "pending",
-            qualityLevel: "custom",
-            resizeOption: settings.resizeOption,
             outputFormat,
-            originalPath: file.path,
-            originalFormat: file.mimetype.split("/")[1],
-            // Add required field
-            compressedSize: null,
-            compressionRatio: null,
-            errorMessage: null,
-            compressedPath: null
+            originalPath: file.path
           });
           console.log(`Created job ${job.id} for user ${user?.id || "guest"}`);
           jobs.push({ job, file, outputFormat });
@@ -12226,7 +12244,7 @@ async function registerRoutes(app2) {
         }
         console.log(`\u2705 Recorded ${successfulJobs.length} successful operations via DualUsageTracker`);
       }
-      const batchId = (0, import_crypto6.randomUUID)();
+      const batchId = (0, import_crypto5.randomUUID)();
       const successfulFiles = results.filter((r) => !r.error && r.compressedFileName).map((r) => r.compressedFileName);
       global.batchFiles = global.batchFiles || {};
       global.batchFiles[batchId] = {
@@ -12459,7 +12477,7 @@ async function registerRoutes(app2) {
       if (validFiles.length === 0) {
         return res.status(404).json({ error: "No valid files found for download" });
       }
-      const batchId = (0, import_crypto6.randomUUID)();
+      const batchId = (0, import_crypto5.randomUUID)();
       const fileNames = validFiles.map((f) => f.name);
       global.batchFiles = global.batchFiles || {};
       global.batchFiles[batchId] = {
@@ -12587,9 +12605,17 @@ async function registerRoutes(app2) {
   });
   app2.post("/api/check-operation", async (req, res) => {
     try {
+      console.log("\u{1F527} /api/check-operation called with:", req.body);
       const { filename, fileSize, pageIdentifier } = req.body;
       const sessionId = req.sessionID;
       const userId2 = req.user?.id;
+      console.log("\u{1F527} Check operation params:", {
+        filename,
+        fileSize,
+        pageIdentifier: pageIdentifier || "not provided",
+        sessionId,
+        userId: userId2 || "anonymous"
+      });
       let userType = "anonymous";
       if (userId2) {
         try {
@@ -12600,11 +12626,15 @@ async function registerRoutes(app2) {
           userType = "anonymous";
         }
       }
+      console.log("\u{1F527} Determined userType:", userType);
       const tracker = new DualUsageTracker(userId2, sessionId, userType);
+      console.log("\u{1F527} About to call canPerformOperation...");
       const result = await tracker.canPerformOperation(filename, fileSize, pageIdentifier);
+      console.log("\u{1F527} canPerformOperation result:", result);
       res.json(result);
     } catch (error) {
       console.error("Error in /api/check-operation:", error);
+      console.error("Error stack:", error instanceof Error ? error.stack : "No stack trace");
       res.status(500).json({
         message: "Internal server error",
         allowed: false,
@@ -13731,10 +13761,7 @@ async function registerRoutes(app2) {
           userId: userId2,
           // Add userId for user association
           originalFilename: file.originalname,
-          originalSize: file.size,
           status: "pending",
-          qualityLevel,
-          resizeOption,
           outputFormat,
           originalPath: file.path,
           compressedSize: null,
@@ -14202,10 +14229,7 @@ async function registerRoutes(app2) {
       for (const file of files) {
         const job = await storage.createCompressionJob({
           originalFilename: file.originalname,
-          originalSize: file.size,
           status: "pending",
-          qualityLevel: "custom",
-          resizeOption: "none",
           outputFormat: "jpeg",
           originalPath: file.path,
           compressedSize: null,
@@ -14246,7 +14270,7 @@ async function registerRoutes(app2) {
             error: `File ${file.originalname} is too large (max 5MB in guest mode)`
           });
         }
-        const jobId = (0, import_crypto6.randomUUID)();
+        const jobId = (0, import_crypto5.randomUUID)();
         const timestamp2 = (/* @__PURE__ */ new Date()).toISOString();
         try {
           console.log(`Processing file: ${file.originalname}, path: ${file.path}, size: ${file.size}`);
@@ -14329,7 +14353,7 @@ async function registerRoutes(app2) {
       if (req.isAuthenticated && req.isAuthenticated() && req.user) {
         userId2 = req.user.id;
       } else {
-        sessionId = req.sessionID || (0, import_crypto6.randomUUID)();
+        sessionId = req.sessionID || (0, import_crypto5.randomUUID)();
       }
       const platformRewards = {
         twitter: 5,
@@ -14730,7 +14754,7 @@ async function registerRoutes(app2) {
       console.log(`Processing ${files.length} special format conversions for user ${userId2 || "guest"}`);
       for (const file of files) {
         try {
-          const jobId = (0, import_crypto6.randomUUID)();
+          const jobId = (0, import_crypto5.randomUUID)();
           const originalFormat = getFileFormat(file.originalname);
           const outputExtension = outputFormat === "jpeg" ? "jpg" : outputFormat;
           const outputPath = import_path5.default.join("converted", `${jobId}.${outputExtension}`);
@@ -14862,8 +14886,6 @@ async function registerRoutes(app2) {
       });
     }
   });
-  app2.post("/api/payment/razorpay/create-order", isAuthenticated, createRazorpayOrder);
-  app2.post("/api/payment/razorpay/verify", isAuthenticated, verifyRazorpayPayment);
   app2.post("/api/payment/paypal/process", isAuthenticated, processPayPalPayment);
   app2.get("/api/subscription/status", isAuthenticated, getSubscriptionStatus);
   app2.post("/api/subscription/cancel", isAuthenticated, cancelSubscription);

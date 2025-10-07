@@ -1,0 +1,25 @@
+R2_ACCOUNT_ID=dab3f48789ab19df2ffaba24fb878360
+R2_ACCESS_KEY_ID=19a540bc9c69e458135aa099671abc10
+R2_SECRET_ACCESS_KEY=d2dec64d4518c48b7fea5c10d0ff36d8576538ebd43538756af1a8f528578ad5
+R2_BUCKET_NAME=microjpeg
+R2_ENDPOINT=https://dab3f48789ab19df2ffaba24fb878360.r2.cloudflarestorage.com
+DATABASE_URL=postgresql://neondb_owner:npg_9IwVG1njzPJR@ep-cold-bar-af3sqai3-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+PGDATABASE=neondb
+PGHOST=ep-rapid-bird-a6kx0qsf.us-west-2.aws.neon.tech
+PGPORT=5432
+PGUSER=neondb_owner
+PGPASSWORD=npg_Ki6a0xyRHDgE
+PAYPAL_CLIENT_ID=BAA6hsJNpHbcTBMWxqcfbZs22QgzO7knIaUhASkWYLR-u6AtMlYgibBGR9pInXEWV7kartihrWi0wTu9O8
+PAYPAL_CLIENT_SECRET=EIhFOMl63RrPMwoEtVg8uV9b9RovHlCfLCs4GmsCpGi0hFTDYbs3qAAKFGvKFUOyWtPTmyv5Ldb0JE8K
+REDIS_URL=redis-cli --tls -u redis://default:ASE1AAImcDFjMzZjODdjZGJkZWU0MGZhOTUwNWNiMGFjYzNkMzRlYnAxODUwMQ@engaged-midge-8501.upstash.io:6379
+SENDGRID_API_KEY=SG.xHQHrLRERi6RrhFFAkeaKw.MKADy1S0PzXrD8Vvw3A_SNbEaduyZE_gpbefLfbUZfE
+SENDGRID_FROM_EMAIL=compressjpg@microjpeg.com
+GOOGLE_ADSENSE_CLIENT_ID=138346990203834000000
+GOOGLE_ADSENSE_PUBLISHER_ID=9368779368777119109420
+SESSION_SECRET=f71oODr/4ro22yCJg7dSQAo2aka/LzYcHf1XgfyzToVMyMOCn+mNmiYxlI/A4/GK4dRxi7be6rUz9rZqsmiSSg==
+NODE_ENV=production
+PORT=3000
+DEFAULT_OBJECT_STORAGE_BUCKET_ID=microjpeg
+PUBLIC_OBJECT_SEARCH_PATHS=/public,/uploads
+PRIVATE_OBJECT_DIR=/private
+

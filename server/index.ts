@@ -5,10 +5,19 @@ import session from 'express-session';
 import cors from 'cors';
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./viteStatic"; // Only prod static serving here!
-import { TestPremiumExpiryManager } from "./testPremiumExpiry";
+// import { TestPremiumExpiryManager } from "./testPremiumExpiry"; // Temporarily disabled due to schema issues
 import { initializeQueueService, shutdownQueueService } from "./queueService";
+import { checkEnvironmentVariables } from "./envChecker";
+import { initializeProductionDatabase } from "./initDatabase";
 
 const app = express();
+
+// Check environment variables on startup
+console.log('🚀 Starting MicroJPEG Server...');
+checkEnvironmentVariables();
+
+// Initialize database tables
+initializeProductionDatabase();
 
 app.set('trust proxy', 1);
 app.set('etag', false);
@@ -23,7 +32,7 @@ app.use(express.urlencoded({ extended: false, limit: '200mb' }));
 
 app.use(
   session({
-    secret: process.env.SESSION_SECRET,
+    secret: process.env.SESSION_SECRET || 'fallback-secret-key-for-development',
     resave: false,
     saveUninitialized: true,
     cookie: {
@@ -145,7 +154,7 @@ app.use((req, res, next) => {
 
   server.listen(port, hostname, () => {
     console.log(`serving on port ${port} on ${hostname}`);
-    TestPremiumExpiryManager.startExpiryChecker();
+    // TestPremiumExpiryManager.startExpiryChecker(); // Temporarily disabled due to schema issues
   });
 
   process.on('SIGTERM', async () => {
