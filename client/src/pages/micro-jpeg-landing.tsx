@@ -2281,7 +2281,7 @@ export default function MicroJPEGLanding() {
               <div className="mb-4">⭐⭐⭐⭐⭐</div>
               <p className="text-gray-700 mb-4 italic">"Perfect for our e-commerce site! Compressed 1000+ product images with zero quality loss. Saves us hours weekly."</p>
               <div className="flex items-center gap-3">
-                <img src={betaUser2} alt="Sarah K." className="w-10 h-10 rounded-full object-cover" />
+                <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center text-white font-bold">S</div>
                 <div>
                   <div className="font-semibold text-sm">Sarah K.</div>
                   <div className="text-gray-500 text-xs">Web Developer</div>
@@ -2293,7 +2293,7 @@ export default function MicroJPEGLanding() {
               <div className="mb-4">⭐⭐⭐⭐⭐</div>
               <p className="text-gray-700 mb-4 italic">"Incredible! Turned my 15MB photos into 1.5MB web images without losing any detail. This tool is a lifesaver!"</p>
               <div className="flex items-center gap-3">
-                <img src={betaUser3} alt="Mike R." className="w-10 h-10 rounded-full object-cover" />
+                <div className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center text-white font-bold">M</div>
                 <div>
                   <div className="font-semibold text-sm">Mike R.</div>
                   <div className="text-gray-500 text-xs">Photography Enthusiast</div>
