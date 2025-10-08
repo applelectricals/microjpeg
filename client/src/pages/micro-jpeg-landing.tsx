@@ -19,7 +19,6 @@ import { DualCounter } from '@/components/DualCounter';
 import { useOperationCheck } from '@/hooks/useOperationCheck';
 import { SEOHead } from '@/components/SEOHead';
 import { SEO_CONTENT, STRUCTURED_DATA } from '@/data/seoData';
-import logoUrl from '@assets/mascot-logo-optimized.png';
 import avifIcon from '@/assets/format-icons/avif.jpg';
 import jpegIcon from '@/assets/format-icons/jpeg.jpg';
 import pngIcon from '@/assets/format-icons/png.jpg';
@@ -2768,7 +2767,6 @@ export default function MicroJPEGLanding() {
             {/* Brand */}
             <div className="space-y-4">
               <div className="flex items-center gap-3">
-                <img src={logoUrl} alt="MicroJPEG Logo" className="w-10 h-10" />
                 <span className="text-xl font-bold font-poppins">MicroJPEG</span>
               </div>
               <p className="text-gray-600 font-opensans">
