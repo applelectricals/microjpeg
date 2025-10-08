@@ -1,6 +1,9 @@
 // Redis-based database query caching service
 import { redis } from './redis';
 
+// Skip all caching in development to avoid Redis delays
+const SKIP_CACHE = process.env.NODE_ENV === 'development';
+
 export interface CacheConfig {
   defaultTTL: number; // Time to live in seconds
   keyPrefix: string;
@@ -50,6 +53,12 @@ export class CacheService {
    * Get cached data
    */
   async get<T>(namespace: string, key: string): Promise<T | null> {
+    // Skip cache in development to avoid Redis delays
+    if (SKIP_CACHE) {
+      this.updateMetrics(false);
+      return null;
+    }
+    
     try {
       const cacheKey = this.generateKey(namespace, key);
       const cached = await redis.get(cacheKey);
@@ -72,6 +81,11 @@ export class CacheService {
    * Set cached data with TTL
    */
   async set(namespace: string, key: string, data: any, ttl?: number): Promise<boolean> {
+    // Skip cache in development to avoid Redis delays
+    if (SKIP_CACHE) {
+      return true;
+    }
+    
     try {
       const cacheKey = this.generateKey(namespace, key);
       const value = JSON.stringify(data);
@@ -89,6 +103,11 @@ export class CacheService {
    * Delete cached data
    */
   async delete(namespace: string, key: string): Promise<boolean> {
+    // Skip cache in development to avoid Redis delays
+    if (SKIP_CACHE) {
+      return true;
+    }
+    
     try {
       const cacheKey = this.generateKey(namespace, key);
       const result = await redis.del(cacheKey);
@@ -163,6 +182,16 @@ export class CacheService {
    * Batch get multiple keys
    */
   async mget<T>(namespace: string, keys: string[]): Promise<Record<string, T | null>> {
+    // Skip cache in development to avoid Redis delays
+    if (SKIP_CACHE) {
+      const result: Record<string, T | null> = {};
+      keys.forEach(key => {
+        result[key] = null;
+        this.updateMetrics(false);
+      });
+      return result;
+    }
+    
     try {
       const cacheKeys = keys.map(key => this.generateKey(namespace, key));
       const values = await redis.mget(...cacheKeys);
