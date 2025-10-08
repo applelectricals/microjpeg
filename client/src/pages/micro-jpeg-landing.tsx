@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react';
-import { Upload, Settings, Download, Zap, Shield, Sparkles, X, Check, ArrowRight, ImageIcon, ChevronDown, Crown, Plus, Minus, Menu, Calendar, Activity } from 'lucide-react';
+import { Upload, Settings, Download, Zap, Shield, Sparkles, X, Check, ArrowRight, ImageIcon, ChevronDown, Crown, Plus, Minus, Menu, Calendar, Activity, FileImage } from 'lucide-react';
 import { SiWordpress } from 'react-icons/si';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
