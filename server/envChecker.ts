@@ -17,7 +17,6 @@ export function checkEnvironmentVariables() {
   ];
   
   const optionalVars = [
-    'REDIS_URL',
     'RAZORPAY_KEY_ID',
     'RAZORPAY_KEY_SECRET'
   ];

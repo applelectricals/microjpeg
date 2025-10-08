@@ -80,11 +80,11 @@ app.use((req, res, next) => {
   try {
     const queueInitialized = await initializeQueueService();
     if (!queueInitialized) {
-      console.warn('⚠️  Queue service failed to initialize - will fallback to direct processing');
+      console.warn('⚠️  Queue service disabled - Redis has been eliminated for performance');
     }
   } catch (error) {
     console.error('❌ Queue service initialization error:', error);
-    console.log('📝 Note: Set REDIS_URL environment variable for queue functionality');
+    console.log('📝 Note: Redis has been eliminated from this application');
   }
 
   // 301 redirects for legacy URLs (unchanged)

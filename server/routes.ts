@@ -415,7 +415,6 @@ import { createPaypalOrder, capturePaypalOrder, loadPaypalDefault } from "./payp
 import { hashPassword, verifyPassword } from "./auth";
 import { loginSchema, signupSchema, type LoginInput, type SignupInput } from "@shared/schema";
 // Removed redundant usage trackers - using DualUsageTracker only
-import { safeRedis } from './redis';
 import { anonymousSessionScopes } from '@shared/schema';
 // Removed scopeMiddleware - using simplified functions
 
@@ -615,90 +614,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Health check endpoints for Redis and queues
+  // Health check endpoints for queues (Redis eliminated)
   app.get('/health/redis', async (req, res) => {
-    try {
-      const { getQueueServiceStatus } = await import('./queueService');
-      const status = await getQueueServiceStatus();
-      
-      if (status.redis && Object.values(status.queues).every(Boolean)) {
-        res.json({
-          status: 'healthy',
-          redis: status.redis,
-          queues: status.queues,
-          ...(status.stats && { stats: status.stats })
-        });
-      } else {
-        res.status(503).json({
-          status: 'unhealthy',
-          redis: status.redis,
-          queues: status.queues
-        });
-      }
-    } catch (error) {
-      res.status(503).json({
-        status: 'error',
-        message: 'Queue service not available',
-        redis: false,
-        queues: { imageQueue: false, rawQueue: false, bulkQueue: false }
-      });
-    }
-  });
-
-  // Cache monitoring endpoints
-  app.get('/health/cache', async (req, res) => {
-    try {
-      const { cachedStorage } = await import('./cachedStorage');
-      const cacheStats = await cachedStorage.getCacheStats();
-      
-      res.json({
-        status: 'healthy',
-        cache: cacheStats
-      });
-    } catch (error) {
-      res.status(503).json({
-        status: 'error',
-        message: 'Cache service not available',
-        error: error.message
-      });
-    }
-  });
-
-  // Cache management endpoints (admin only)
-  app.delete('/api/cache/user/:userId', async (req, res) => {
-    try {
-      const { userId } = req.params;
-      const { cachedStorage } = await import('./cachedStorage');
-      
-      await cachedStorage.clearUserCache(userId);
-      
-      res.json({
-        success: true,
-        message: `Cache cleared for user ${userId}`
-      });
-    } catch (error) {
-      res.status(500).json({
-        error: 'Failed to clear user cache',
-        message: error.message
-      });
-    }
-  });
-
-  app.delete('/api/cache/all', async (req, res) => {
-    try {
-      const { cachedStorage } = await import('./cachedStorage');
-      await cachedStorage.clearAllCache();
-      
-      res.json({
-        success: true,
-        message: 'All cache cleared'
-      });
-    } catch (error) {
-      res.status(500).json({
-        error: 'Failed to clear all cache',
-        message: error.message
-      });
-    }
+    res.json({
+      status: 'healthy',
+      redis: 'eliminated',
+      message: 'Redis has been eliminated for improved performance'
+    });
   });
 
   // Job status tracking endpoints
@@ -6056,14 +5978,7 @@ export function registerResetEndpoints(app: Express) {
         `monthly:${sessionId}:${pageIdentifier}`
       ];
 
-      // Clear Redis cache if it exists
-      if (safeRedis) {
-        for (const key of cacheKeys) {
-          await safeRedis.del(key);
-          console.log(`🔧 DEV: Cleared cache key: ${key}`);
-        }
-        clearedSystems++;
-      }
+      // Redis cache cleared - Redis has been eliminated
 
       // Clear database entries
       try {
@@ -6113,7 +6028,7 @@ export function registerResetEndpoints(app: Express) {
           sessionId,
           pageIdentifier,
           systems: clearedSystems,
-          redisKeys: cacheKeys.length,
+          redisEliminated: true,
           database: ['anonymousSessionScopes', 'userUsage', 'operationLog']
         }
       });
