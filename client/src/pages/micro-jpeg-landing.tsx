@@ -19,15 +19,6 @@ import { DualCounter } from '@/components/DualCounter';
 import { useOperationCheck } from '@/hooks/useOperationCheck';
 import { SEOHead } from '@/components/SEOHead';
 import { SEO_CONTENT, STRUCTURED_DATA } from '@/data/seoData';
-import avifIcon from '@/assets/format-icons/avif.jpg';
-import jpegIcon from '@/assets/format-icons/jpeg.jpg';
-import pngIcon from '@/assets/format-icons/png.jpg';
-import webpIcon from '@/assets/format-icons/webp.jpg';
-import betaUser1 from '@assets/01_1756987891168.webp';
-import betaUser2 from '@assets/06_1756987891169.webp';
-import betaUser3 from '@assets/07_1756987891169.webp';
-import owlMascot01 from '@assets/owl-mascot-01.webp';
-import owlMascot02 from '@assets/owl-mascot-02.webp';
 // Lazy load heavy components for better performance
 const AdSenseAd = lazy(() => import('@/components/AdSenseAd').then(m => ({ default: m.AdSenseAd })));
 const OurProducts = lazy(() => import('@/components/our-products'));
@@ -242,33 +233,33 @@ const groupResultsByOriginalName = (results: CompressionResult[]) => {
 
 // Helper function to get format-specific styling
 const getFormatInfo = (format: string) => {
-  const formatMap: Record<string, { icon: string; color: string; bgColor: string; textColor: string }> = {
+  const formatMap: Record<string, { icon: null; color: string; bgColor: string; textColor: string }> = {
     'avif': { 
-      icon: avifIcon, 
+      icon: null, 
       color: '#F59E0B', // Yellow/orange
       bgColor: '#FEF3C7', 
       textColor: '#92400E' 
     },
     'jpeg': { 
-      icon: jpegIcon, 
+      icon: null, 
       color: '#10B981', // Green
       bgColor: '#D1FAE5', 
       textColor: '#065F46' 
     },
     'jpg': { 
-      icon: jpegIcon, 
+      icon: null, 
       color: '#10B981', // Green
       bgColor: '#D1FAE5', 
       textColor: '#065F46' 
     },
     'png': { 
-      icon: pngIcon, 
+      icon: null, 
       color: '#3B82F6', // Blue
       bgColor: '#DBEAFE', 
       textColor: '#1E40AF' 
     },
     'webp': { 
-      icon: webpIcon, 
+      icon: null, 
       color: '#F97316', // Orange
       bgColor: '#FED7AA', 
       textColor: '#EA580C' 
@@ -276,7 +267,7 @@ const getFormatInfo = (format: string) => {
   };
   
   return formatMap[format] || {
-    icon: jpegIcon,
+    icon: null,
     color: '#6B7280',
     bgColor: '#F3F4F6',
     textColor: '#374151'
@@ -2069,11 +2060,7 @@ export default function MicroJPEGLanding() {
                                       style={{ backgroundColor: formatInfo.color }}
                                       onClick={() => window.open(result.downloadUrl, '_blank')}
                                     >
-                                      <img 
-                                        src={formatInfo.icon} 
-                                        alt={result.outputFormat} 
-                                        className="w-4 h-4 object-contain"
-                                      />
+                                      <FileImage className="w-4 h-4 text-white" />
                                       <span className="text-white text-xs font-bold">
                                         {(result.outputFormat || 'unknown').toUpperCase()}
                                       </span>
@@ -2098,14 +2085,6 @@ export default function MicroJPEGLanding() {
       {/* Test Premium for $1 Section */}
       <section className="py-16 bg-gradient-to-r from-brand-teal/10 via-brand-gold/10 to-brand-teal/10 relative overflow-hidden">
         <div className="max-w-4xl mx-auto px-4 text-center relative">
-          {/* Owl Mascot */}
-          <div className="absolute -top-8 -left-4 w-16 h-16 opacity-30">
-            <img src={owlMascot01} alt="" className="w-full h-full object-contain" />
-          </div>
-          <div className="absolute -bottom-8 -right-4 w-20 h-20 opacity-30">
-            <img src={owlMascot02} alt="" className="w-full h-full object-contain" />
-          </div>
-          
           <div className="bg-gradient-to-br from-white to-gray-50 rounded-3xl shadow-2xl p-8 border border-brand-gold/20 relative">
             {/* Premium Badge - Fixed Mobile Layout */}
             <div 
@@ -2243,9 +2222,9 @@ export default function MicroJPEGLanding() {
               <div className="mt-6 flex flex-col sm:flex-row justify-center items-center gap-4 sm:gap-6 text-sm text-gray-600">
                 <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-2">
                   <div className="flex flex-col sm:flex-row sm:-space-x-2 gap-1 sm:gap-0 items-center">
-                    <img src={betaUser1} alt="Beta user" className="w-8 h-8 rounded-full border-2 border-white object-cover" />
-                    <img src={betaUser2} alt="Beta user" className="w-8 h-8 rounded-full border-2 border-white object-cover" />
-                    <img src={betaUser3} alt="Beta user" className="w-8 h-8 rounded-full border-2 border-white object-cover" />
+                    <div className="w-8 h-8 bg-blue-500 rounded-full border-2 border-white flex items-center justify-center text-white text-xs font-bold">A</div>
+                    <div className="w-8 h-8 bg-green-500 rounded-full border-2 border-white flex items-center justify-center text-white text-xs font-bold">B</div>
+                    <div className="w-8 h-8 bg-purple-500 rounded-full border-2 border-white flex items-center justify-center text-white text-xs font-bold">C</div>
                     <div className="w-8 h-8 bg-brand-teal rounded-full border-2 border-white flex items-center justify-center text-white text-xs font-bold">+</div>
                   </div>
                   <span className="text-center">500+ beta users</span>
@@ -2290,7 +2269,7 @@ export default function MicroJPEGLanding() {
               <div className="mb-4">⭐⭐⭐⭐⭐</div>
               <p className="text-gray-700 mb-4 italic">"Amazing compression quality! Reduced our image sizes by 80% while keeping perfect quality. The API is super easy to use."</p>
               <div className="flex items-center gap-3">
-                <img src={betaUser1} alt="Alex M." className="w-10 h-10 rounded-full object-cover" />
+                <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold">A</div>
                 <div>
                   <div className="font-semibold text-sm">Alex M.</div>
                   <div className="text-gray-500 text-xs">Startup Founder</div>
