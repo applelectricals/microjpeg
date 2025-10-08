@@ -20,7 +20,6 @@ import { useOperationCheck } from '@/hooks/useOperationCheck';
 import { SEOHead } from '@/components/SEOHead';
 import { SEO_CONTENT, STRUCTURED_DATA } from '@/data/seoData';
 import logoUrl from '@assets/mascot-logo-optimized.png';
-import mascotUrl from '@/assets/mascot.webp';
 import avifIcon from '@/assets/format-icons/avif.jpg';
 import jpegIcon from '@/assets/format-icons/jpeg.jpg';
 import pngIcon from '@/assets/format-icons/png.jpg';
@@ -1595,11 +1594,6 @@ export default function MicroJPEGLanding() {
                 </div>
 
               </Card>
-
-              {/* Mascot */}
-              <div className="hidden sm:block absolute -bottom-4 -right-4 w-16 h-16 lg:w-24 lg:h-24 animate-float">
-                <img src={mascotUrl} alt="MicroJPEG Mascot" className="w-full h-full object-contain" />
-              </div>
             </div>
           </div>
         </div>
