@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import Header from '@/components/header';
 import Footer from '@/components/footer';
-import logoUrl from '@assets/Header_Logo20KB.svg';
+import logoUrl from '@assets/LOGO.svg';
 
 export default function About() {
   return (

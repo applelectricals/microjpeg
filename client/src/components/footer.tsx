@@ -1,4 +1,4 @@
-import logoUrl from "@assets/Header_Logo20KB.svg";
+import logoUrl from "@assets/LOGO.svg";
 
 export default function Footer() {
   return (

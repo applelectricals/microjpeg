@@ -6,7 +6,7 @@ import { Check, Zap, Building2, Users, Crown } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import Header from '@/components/header';
-import logoUrl from '@assets/Header_Logo20KB.svg';
+import logoUrl from '@assets/LOGO.svg';
 import { logPerformanceMetrics, preloadImage } from '@/lib/performance';
 
 const tiers = [
