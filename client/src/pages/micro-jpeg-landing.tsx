@@ -738,10 +738,10 @@ export default function MicroJPEGLanding() {
     }
 
     setIsProcessing(true);
-    setShowModal(true);
-    setModalState('processing');
-    setProcessingProgress(0);
-    setProcessingStatus('Preparing files...');
+    // ✅ REMOVED: setShowModal(true) - now handled by UploadComplete()
+    // ✅ REMOVED: setModalState('processing') - now handled by UploadComplete()
+    // ✅ REMOVED: setProcessingProgress(0) - now handled by UploadComplete()
+    // ✅ REMOVED: setProcessingStatus('Preparing files...') - now handled by UploadComplete()
     
     // Mark files as processing
     const fileIds = new Set(filesToProcess.map(f => f.id));
@@ -892,6 +892,24 @@ export default function MicroJPEGLanding() {
       setNewlyAddedFiles([]);
     }
   }, [selectedFiles, user, session, selectedFormats, conversionEnabled, toast]);
+
+  // ✅ NEW: Upload Complete trigger - launches modal immediately on successful upload
+  const UploadComplete = useCallback(() => {
+    console.log('🚀 UploadComplete triggered - showing modal immediately');
+    
+    // 1. Modal Component Render (at the top of sequence)
+    setShowModal(true);
+    
+    // 2. Then set modal state to processing
+    setModalState('processing');
+    setProcessingProgress(0);
+    setProcessingStatus('Preparing files...');
+    
+    toast({
+      title: "Upload successful!",
+      description: "Your files are ready. Processing will begin automatically.",
+    });
+  }, [toast]);
 
   // Download all results as comprehensive ZIP
   const downloadAllResults = useCallback(async () => {
@@ -1044,7 +1062,7 @@ export default function MicroJPEGLanding() {
       setProcessingProgress(20);
       setProcessingStatus(`Processing ${format.toUpperCase()}...`);
 
-      const response = await fetch('http:/api/compress', {
+      const response = await fetch('/api/compress', {
         method: 'POST',
         body: formData,
       });
@@ -1225,12 +1243,15 @@ export default function MicroJPEGLanding() {
       // Reset format selection to JPEG only on every new file upload
       setSelectedFormats(['jpeg']);
       
+      // ✅ NEW: Trigger modal launch immediately on successful upload
+      UploadComplete();
+      
       toast({
-        title: "Files added - Auto-compressing...",
-        description: `${validFiles.length} file(s) added. Starting compression automatically.`,
+        title: "Files uploaded successfully!",
+        description: `${validFiles.length} file(s) ready for processing.`,
       });
     }
-  }, [selectedFiles, toast]);
+  }, [selectedFiles, toast, UploadComplete]);
 
   // Drag and drop handlers
   const handleDrag = useCallback((e: React.DragEvent) => {
