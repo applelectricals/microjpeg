@@ -15,18 +15,18 @@ export default function Header() {
   const optimisticCounterRef = useRef<{monthly: number, daily: number, hourly: number} | null>(null);
 
 
-  // Fetch dual usage statistics for header display - OPTIMIZED for performance
+  // Fetch dual usage statistics for header display - ULTRA OPTIMIZED for performance
   useEffect(() => {
     const fetchDualStats = async () => {
       try {
-        // Add timeout to prevent hanging
+        // Aggressive timeout to prevent blocking - 2 seconds max
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 2000); // Reduced from 5s to 2s
         
         const response = await fetch('/api/universal-usage-stats', {
           method: 'GET',
           credentials: 'include',
-          cache: 'default', // Allow caching for performance
+          cache: 'force-cache', // Aggressive caching to prevent repeated requests
           signal: controller.signal
         });
         
@@ -35,17 +35,29 @@ export default function Header() {
         if (response.ok) {
           const data = await response.json();
           setDualStats(data);
-          // Reset optimistic counter when we get real data
+          // Store in sessionStorage for immediate reuse
+          sessionStorage.setItem('header-stats', JSON.stringify(data));
           optimisticCounterRef.current = null;
         }
-      } catch (error) {
+      } catch (error: any) {
         if (error.name === 'AbortError') {
-          console.log('Header: Stats fetch timed out - using fallback');
+          console.log('Header: Stats fetch timed out after 2s - using cached/fallback');
         } else {
           console.log('Header: Error fetching dual usage stats:', error);
         }
         
-        // Set fallback stats to prevent UI blocking
+        // Try to use cached data first
+        const cached = sessionStorage.getItem('header-stats');
+        if (cached) {
+          try {
+            setDualStats(JSON.parse(cached));
+            return;
+          } catch (e) {
+            console.log('Header: Cached data invalid');
+          }
+        }
+        
+        // Set minimal fallback stats to prevent UI blocking
         setDualStats({
           userType: 'anonymous',
           stats: {
@@ -57,11 +69,21 @@ export default function Header() {
       }
     };
 
+    // Check for cached data first - instant load
+    const cached = sessionStorage.getItem('header-stats');
+    if (cached) {
+      try {
+        setDualStats(JSON.parse(cached));
+      } catch (e) {
+        console.log('Header: Invalid cached data');
+      }
+    }
+
     // Non-blocking: Don't wait for stats to render the page
-    setTimeout(fetchDualStats, 100); // Defer by 100ms to let page render first
+    setTimeout(fetchDualStats, 500); // Increased delay to let page render completely first
     
-    // Refresh every 30 seconds for updates
-    const interval = setInterval(fetchDualStats, 30000);
+    // Refresh every 60 seconds to reduce server load
+    const interval = setInterval(fetchDualStats, 60000); // Increased from 30s to 60s
     
     // Listen for manual refresh events from file operations with debounce
     let refreshTimeout: NodeJS.Timeout;
@@ -70,7 +92,7 @@ export default function Header() {
       clearTimeout(refreshTimeout);
       refreshTimeout = setTimeout(() => {
         fetchDualStats();
-      }, 250);
+      }, 500); // Increased debounce
     };
     
     window.addEventListener('refreshUniversalCounter', handleRefresh);

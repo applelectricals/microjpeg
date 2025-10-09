@@ -1,45 +1,20 @@
 Insights
-Render blocking requests Est savings of 310 ms
+Render blocking requests Est savings of 60 ms
 Requests are blocking the page's initial render, which may delay LCP. Deferring or inlining can move these network requests out of the critical path.LCPFCP
 URL
 Transfer Size
 Duration
 microjpeg.com 1st party
-19.1 KiB	230 ms
-/assets/index-DArF7IxZ.css(microjpeg.com)
-19.1 KiB
+19.0 KiB	230 ms
+/assets/index-DOMdktDY.css(microjpeg.com)
+19.0 KiB
 230 ms
-replit.com
-2.6 KiB	230 ms
-…js/replit-dev-banner.js(replit.com)
-2.6 KiB
-230 ms
-Google Fonts cdn 
-8.3 KiB	840 ms
-/css2?family=Inter:wght@300;400;500;600;700&display=swap(fonts.googleapis.com)
-1.5 KiB
-230 ms
-/css2?family=…(fonts.googleapis.com)
-2.9 KiB
-150 ms
-/css2?family=Open+Sans:wght@300;400;500;600;700&display=swap(fonts.googleapis.com)
-2.6 KiB
-230 ms
-/css2?family=Poppins:wght@400;500;600;700;800&display=swap(fonts.googleapis.com)
-1.3 KiB
-230 ms
-Improve image delivery Est savings of 194 KiB
-Reducing the download time of images can improve the perceived load time of the page and LCP. Learn more about optimizing image sizeLCPFCP
-URL
-Resource Size
-Est Savings
-microjpeg.com 1st party
-194.4 KiB	194.4 KiB
-/assets/mascot-logo-optimized-BdORzE_N.png(microjpeg.com)
-194.4 KiB
-194.4 KiB
-This image file is larger than it needs to be (3908x4961) for its displayed dimensions (45x45). Use responsive images to reduce the image download size.
-194.4 KiB
+Forced reflow
+A forced reflow occurs when JavaScript queries geometric properties (such as offsetWidth) after styles have been invalidated by a change to the DOM state. This can result in poor performance. Learn more about forced reflows and possible mitigations.
+Source
+Total reflow time
+[unattributed]
+34 ms
 LCP request discovery
 Optimize LCP by making the LCP image discoverable from the HTML immediately, and avoiding lazy-loadingLCP
 lazy load not applied
@@ -49,53 +24,43 @@ Compress Images 13 to 6 image formats including RAW Free Forever Optimize your�
 <div class="min-h-screen hero-background relative">
 Network dependency tree
 Avoid chaining critical requests by reducing the length of chains, reducing the download size of resources, or deferring the download of unnecessary resources to improve page load.LCP
-Maximum critical path latency: 32,283 ms
+Maximum critical path latency: 32,142 ms
 Initial Navigation
-https://microjpeg.com - 462 ms, 4.69 KiB
-/css2?family=Inter:wght@300;400;500;600;700&display=swap(fonts.googleapis.com) - 464 ms, 1.50 KiB
-/css2?family=Open+Sans:wght@300;400;500;600;700&display=swap(fonts.googleapis.com) - 463 ms, 2.63 KiB
-…v44/memvYaGs1….woff2(fonts.gstatic.com) - 2,183 ms, 42.75 KiB
-/css2?family=Poppins:wght@400;500;600;700;800&display=swap(fonts.googleapis.com) - 461 ms, 1.29 KiB
-…v24/pxiEyp8kv….woff2(fonts.gstatic.com) - 2,182 ms, 8.51 KiB
-…v24/pxiByp8kv….woff2(fonts.gstatic.com) - 2,182 ms, 8.35 KiB
-…v24/pxiByp8kv….woff2(fonts.gstatic.com) - 2,182 ms, 8.60 KiB
-…v24/pxiByp8kv….woff2(fonts.gstatic.com) - 2,182 ms, 8.46 KiB
-/assets/index-BQhoEZqa.js(microjpeg.com) - 1,329 ms, 92.35 KiB
-/assets/micro-jpe….js(microjpeg.com) - 1,564 ms, 24.07 KiB
-/assets/our-produ….js(microjpeg.com) - 2,112 ms, 2.30 KiB
-/assets/circle-check-big-BVhEMlxI.js(microjpeg.com) - 2,112 ms, 0.93 KiB
-/assets/globe-BS_n0y3W.js(microjpeg.com) - 1,984 ms, 0.98 KiB
-/assets/code-ndYTU5GO.js(microjpeg.com) - 1,985 ms, 0.93 KiB
-/assets/mascot-lo….js(microjpeg.com) - 1,560 ms, 2.75 KiB
-/assets/button-DwBMe1P4.js(microjpeg.com) - 1,537 ms, 1.15 KiB
-/assets/card-OqxCimoQ.js(microjpeg.com) - 1,518 ms, 1.55 KiB
-/assets/badge-Bq_9Hp3k.js(microjpeg.com) - 1,519 ms, 1.27 KiB
-/assets/index-BOLSCKIb.js(microjpeg.com) - 1,586 ms, 2.52 KiB
-/assets/index-BM1btGf7.js(microjpeg.com) - 1,518 ms, 0.80 KiB
-/assets/index--yHRMM5I.js(microjpeg.com) - 1,538 ms, 6.75 KiB
-/assets/usageTrac….js(microjpeg.com) - 1,567 ms, 1.58 KiB
-/assets/header-B0LukxFZ.js(microjpeg.com) - 1,561 ms, 5.18 KiB
-/api/universal-usage-stats(microjpeg.com) - 2,425 ms, 0.82 KiB
-/api/universal-usage-stats(microjpeg.com) - 32,283 ms, 0.82 KiB
-/assets/calendar-Dp7jFczy.js(microjpeg.com) - 1,585 ms, 1.34 KiB
-/assets/clock-BClWrjHF.js(microjpeg.com) - 1,643 ms, 0.93 KiB
-/assets/SEOHead-DJs6xTNg.js(microjpeg.com) - 1,538 ms, 1.13 KiB
-/assets/seoData-DC1T-9GA.js(microjpeg.com) - 1,539 ms, 1.73 KiB
-/assets/upload-C5Kj5rSV.js(microjpeg.com) - 1,559 ms, 1.00 KiB
-/assets/download-CIHp2n82.js(microjpeg.com) - 1,560 ms, 1.00 KiB
-/assets/crown-tz-zNUcA.js(microjpeg.com) - 1,559 ms, 1.10 KiB
-/assets/check-B4y6JfwI.js(microjpeg.com) - 1,525 ms, 0.87 KiB
-/assets/file-imag….js(microjpeg.com) - 1,524 ms, 1.09 KiB
-/assets/zap-CbG97f4p.js(microjpeg.com) - 1,558 ms, 1.00 KiB
-/assets/shield-C_8CzUDf.js(microjpeg.com) - 1,559 ms, 1.01 KiB
-/assets/arrow-rig….js(microjpeg.com) - 1,559 ms, 0.91 KiB
-/assets/settings-CelhscIN.js(microjpeg.com) - 1,802 ms, 1.46 KiB
-/assets/minus-Dk3ablUj.js(microjpeg.com) - 1,524 ms, 0.86 KiB
-/assets/plus-CYiYdwe7.js(microjpeg.com) - 1,585 ms, 0.90 KiB
-…auth/user(microjpeg.com) - 1,369 ms, 0.00 KiB
-/assets/index-DArF7IxZ.css(microjpeg.com) - 758 ms, 19.10 KiB
-/css2?family=…(fonts.googleapis.com) - 766 ms, 2.89 KiB
-…js/replit-dev-banner.js(replit.com) - 527 ms, 2.63 KiB
+https://microjpeg.com - 461 ms, 4.85 KiB
+/assets/index-Dozo-C8z.js(microjpeg.com) - 906 ms, 92.47 KiB
+/assets/micro-jpe….js(microjpeg.com) - 1,491 ms, 24.05 KiB
+/assets/our-produ….js(microjpeg.com) - 1,959 ms, 2.29 KiB
+/assets/circle-ch….js(microjpeg.com) - 1,957 ms, 0.93 KiB
+/assets/globe-CexDGlaU.js(microjpeg.com) - 1,957 ms, 0.98 KiB
+/assets/code-DoxbC19L.js(microjpeg.com) - 1,958 ms, 0.93 KiB
+/assets/Header_Lo….js(microjpeg.com) - 1,450 ms, 2.74 KiB
+/assets/button-ClO-9ofh.js(microjpeg.com) - 1,447 ms, 1.15 KiB
+/assets/card-Cga6xOkM.js(microjpeg.com) - 1,424 ms, 1.55 KiB
+/assets/badge-DrA0DmjQ.js(microjpeg.com) - 1,425 ms, 1.27 KiB
+/assets/index-B7TfixZD.js(microjpeg.com) - 1,474 ms, 2.52 KiB
+/assets/index-RYIbwTRP.js(microjpeg.com) - 1,426 ms, 0.80 KiB
+/assets/index-u8Lti_Wa.js(microjpeg.com) - 1,484 ms, 6.75 KiB
+/assets/usageTrac….js(microjpeg.com) - 1,473 ms, 1.58 KiB
+/assets/header-TxLLFDFb.js(microjpeg.com) - 1,486 ms, 5.34 KiB
+/api/universal-usage-stats(microjpeg.com) - 2,309 ms, 0.83 KiB
+/api/universal-usage-stats(microjpeg.com) - 32,142 ms, 0.83 KiB
+/assets/calendar-QP5MXQBT.js(microjpeg.com) - 1,425 ms, 1.34 KiB
+/assets/clock-5GBdKGKI.js(microjpeg.com) - 1,426 ms, 0.93 KiB
+/assets/SEOHead-CvjlqTlz.js(microjpeg.com) - 1,487 ms, 1.13 KiB
+/assets/seoData-DC1T-9GA.js(microjpeg.com) - 1,487 ms, 1.73 KiB
+/assets/upload-CB6elBbs.js(microjpeg.com) - 1,427 ms, 1.00 KiB
+/assets/download-UxuvE2ye.js(microjpeg.com) - 1,443 ms, 1.00 KiB
+/assets/crown-BrID4twO.js(microjpeg.com) - 1,442 ms, 1.10 KiB
+/assets/check-Ckwfyn2W.js(microjpeg.com) - 1,546 ms, 0.87 KiB
+/assets/file-imag….js(microjpeg.com) - 1,434 ms, 1.09 KiB
+/assets/zap-BPIkkWsK.js(microjpeg.com) - 1,767 ms, 1.00 KiB
+/assets/shield-DohdrrqU.js(microjpeg.com) - 1,442 ms, 1.01 KiB
+/assets/arrow-rig….js(microjpeg.com) - 1,443 ms, 0.91 KiB
+/assets/settings-ClZ7KuJb.js(microjpeg.com) - 1,445 ms, 1.46 KiB
+/assets/minus-_yri2hHu.js(microjpeg.com) - 1,444 ms, 0.86 KiB
+/assets/plus-JJiUQUCo.js(microjpeg.com) - 1,455 ms, 0.90 KiB
+…auth/user(microjpeg.com) - 1,260 ms, 0.00 KiB
+/assets/index-DOMdktDY.css(microjpeg.com) - 685 ms, 19.04 KiB
 Preconnected origins
 preconnect hints help the browser establish a connection earlier in the page load, saving time when the first request for that origin is made. The following are the origins that the page preconnected to.
 no origins were preconnected
@@ -103,49 +68,29 @@ Preconnect candidates
 Add preconnect hints to your most important origins, but try to use no more than 4.
 No additional origins are good candidates for preconnecting
 Layout shift culprits
+Optimize DOM size
 LCP breakdown
 3rd parties
 These insights are also available in the Chrome DevTools Performance Panel - record a trace to view more detailed information.
 Diagnostics
-Reduce unused JavaScript Est savings of 184 KiB
+Reduce unused JavaScript Est savings of 185 KiB
 Reduce unused JavaScript and defer loading scripts until they are required to decrease bytes consumed by network activity. Learn how to reduce unused JavaScript.LCPFCP
 URL
 Transfer Size
 Est Savings
 Google/Doubleclick Ads ad 
-220.2 KiB	148.1 KiB
+220.2 KiB	149.2 KiB
 …m202…/show_ads_impl_with_ama_fy2021.js?client=…(pagead2.googlesyndication.com)
 167.2 KiB
 121.5 KiB
 …js/adsbygoogle.js?client=ca-pub-936…(pagead2.googlesyndication.com)
 53.0 KiB
-26.6 KiB
+27.6 KiB
 microjpeg.com 1st party
-91.7 KiB	36.0 KiB
-/assets/index-BQhoEZqa.js(microjpeg.com)
-91.7 KiB
-36.0 KiB
+91.8 KiB	36.1 KiB
+/assets/index-Dozo-C8z.js(microjpeg.com)
+91.8 KiB
+36.1 KiB
 Avoid serving legacy JavaScript to modern browsers
-Polyfills and transforms enable legacy browsers to use new JavaScript features. However, many aren't necessary for modern browsers. Consider modifying your JavaScript build process to not transpile Baseline features, unless you know you must support legacy browsers. Learn why most sites can deploy ES6+ code without transpilingLCPFCP
-URL
-Est Savings
-adtrafficquality.google
-0.0 KiB
-/sodar/sodar2.js(ep2.adtrafficquality.google)
-0.0 KiB
-/sodar/sodar2.js:9:42(ep2.adtrafficquality.google)
-@babel/plugin-transform-regenerator
-…237/runner.html(ep2.adtrafficquality.google)
-0.0 KiB
-…237/runner.html:9:42(ep2.adtrafficquality.google)
-@babel/plugin-transform-regenerator
 Reduce unused CSS Est savings of 15 KiB
-Reduce unused rules from stylesheets and defer CSS not used for above-the-fold content to decrease bytes consumed by network activity. Learn how to reduce unused CSS.LCPFCP
-URL
-Transfer Size
-Est Savings
-microjpeg.com 1st party
-18.5 KiB	15.0 KiB
-/assets/index-DArF7IxZ.css(microjpeg.com)
-18.5 KiB
-15.0 KiB
+Avoid long main-thread tasks 3 long tasks found

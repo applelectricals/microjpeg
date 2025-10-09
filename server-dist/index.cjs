@@ -319,333 +319,6 @@ var init_db = __esm({
   }
 });
 
-// server/storage.ts
-var import_drizzle_orm, DatabaseStorage, storage;
-var init_storage = __esm({
-  "server/storage.ts"() {
-    "use strict";
-    init_schema();
-    init_db();
-    import_drizzle_orm = require("drizzle-orm");
-    DatabaseStorage = class {
-      // In-memory storage for guest files (temporary)
-      guestFiles = /* @__PURE__ */ new Map();
-      // User operations
-      async getUser(id) {
-        const [user] = await db.select().from(users).where((0, import_drizzle_orm.eq)(users.id, id));
-        return user;
-      }
-      async getUserByEmail(email) {
-        const [user] = await db.select().from(users).where((0, import_drizzle_orm.eq)(users.email, email));
-        return user;
-      }
-      async createUser(insertUser) {
-        const [user] = await db.insert(users).values(insertUser).returning();
-        return user;
-      }
-      async updateUser(id, updates) {
-        const [user] = await db.update(users).set({ ...updates, updatedAt: /* @__PURE__ */ new Date() }).where((0, import_drizzle_orm.eq)(users.id, id)).returning();
-        return user;
-      }
-      async upsertUser(userData) {
-        const [user] = await db.insert(users).values(userData).onConflictDoUpdate({
-          target: users.id,
-          set: {
-            ...userData,
-            updatedAt: /* @__PURE__ */ new Date()
-          }
-        }).returning();
-        return user;
-      }
-      async createCompressionJob(insertJob) {
-        try {
-          const minimalJob = {
-            id: insertJob.id || `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            originalFilename: insertJob.originalFilename,
-            status: insertJob.status || "pending",
-            ...insertJob.userId && { userId: insertJob.userId },
-            ...insertJob.sessionId && { sessionId: insertJob.sessionId },
-            ...insertJob.outputFormat && { outputFormat: insertJob.outputFormat },
-            ...insertJob.originalPath && { originalPath: insertJob.originalPath }
-          };
-          const [job] = await db.insert(compressionJobs).values(minimalJob).returning();
-          return job;
-        } catch (error) {
-          console.error("Error creating compression job:", error);
-          const fallbackJob = {
-            id: insertJob.id || `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            originalFilename: insertJob.originalFilename,
-            status: insertJob.status || "pending",
-            userId: insertJob.userId || null,
-            sessionId: insertJob.sessionId || null,
-            outputFormat: insertJob.outputFormat || null,
-            originalPath: insertJob.originalPath || null,
-            compressedPath: null,
-            errorMessage: null,
-            fileSize: null,
-            compressedSize: null,
-            quality: null,
-            resizePercentage: null,
-            webOptimization: null,
-            metadata: null,
-            compressionSettings: null,
-            createdAt: /* @__PURE__ */ new Date(),
-            updatedAt: null,
-            compressionAlgorithm: null,
-            hasTransparency: false,
-            hasAnimation: false,
-            isProgressive: false,
-            width: null,
-            height: null,
-            inputFormat: null,
-            processingTime: null
-          };
-          return fallbackJob;
-        }
-      }
-      async getCompressionJob(id) {
-        const [job] = await db.select().from(compressionJobs).where((0, import_drizzle_orm.eq)(compressionJobs.id, id));
-        return job;
-      }
-      async getJobsByIds(ids) {
-        if (ids.length === 0) return [];
-        const jobs = await db.select().from(compressionJobs).where((0, import_drizzle_orm.inArray)(compressionJobs.id, ids));
-        return jobs;
-      }
-      async updateCompressionJob(id, updates) {
-        const [updatedJob] = await db.update(compressionJobs).set(updates).where((0, import_drizzle_orm.eq)(compressionJobs.id, id)).returning();
-        return updatedJob;
-      }
-      async getAllCompressionJobs(userId2) {
-        const jobs = await db.select().from(compressionJobs).where(userId2 ? (0, import_drizzle_orm.eq)(compressionJobs.userId, userId2) : void 0).orderBy((0, import_drizzle_orm.desc)(compressionJobs.createdAt));
-        return jobs;
-      }
-      async deleteCompressionJob(id) {
-        const result = await db.delete(compressionJobs).where((0, import_drizzle_orm.eq)(compressionJobs.id, id));
-        return result.rowCount ? result.rowCount > 0 : false;
-      }
-      async getCompressionJobsBySession(sessionId) {
-        const jobs = await db.select().from(compressionJobs).where((0, import_drizzle_orm.eq)(compressionJobs.sessionId, sessionId)).orderBy((0, import_drizzle_orm.desc)(compressionJobs.createdAt));
-        return jobs;
-      }
-      async findExistingJob(userId2, sessionId, originalFilename, outputFormat) {
-        if (userId2) {
-          const [job2] = await db.select().from(compressionJobs).where(
-            (0, import_drizzle_orm.and)(
-              (0, import_drizzle_orm.eq)(compressionJobs.userId, userId2),
-              (0, import_drizzle_orm.eq)(compressionJobs.originalFilename, originalFilename),
-              (0, import_drizzle_orm.eq)(compressionJobs.outputFormat, outputFormat)
-            )
-          ).orderBy((0, import_drizzle_orm.desc)(compressionJobs.createdAt)).limit(1);
-          return job2;
-        }
-        const [job] = await db.select().from(compressionJobs).where(
-          (0, import_drizzle_orm.and)(
-            (0, import_drizzle_orm.eq)(compressionJobs.sessionId, sessionId),
-            (0, import_drizzle_orm.eq)(compressionJobs.originalFilename, originalFilename),
-            (0, import_drizzle_orm.eq)(compressionJobs.outputFormat, outputFormat)
-          )
-        ).orderBy((0, import_drizzle_orm.desc)(compressionJobs.createdAt)).limit(1);
-        return job;
-      }
-      async getUserByVerificationToken(token) {
-        const [user] = await db.select().from(users).where((0, import_drizzle_orm.eq)(users.emailVerificationToken, token));
-        return user;
-      }
-      async verifyUserEmail(id) {
-        const [user] = await db.update(users).set({
-          isEmailVerified: "true",
-          emailVerificationToken: null,
-          emailVerificationExpires: null,
-          updatedAt: /* @__PURE__ */ new Date()
-        }).where((0, import_drizzle_orm.eq)(users.id, id)).returning();
-        return user;
-      }
-      async togglePremiumStatus(userId2) {
-        const currentUser = await this.getUser(userId2);
-        if (!currentUser) return void 0;
-        const newPremiumStatus = !currentUser.isPremium;
-        const [user] = await db.update(users).set({
-          isPremium: newPremiumStatus,
-          updatedAt: /* @__PURE__ */ new Date()
-        }).where((0, import_drizzle_orm.eq)(users.id, userId2)).returning();
-        return user;
-      }
-      async updateUserStripeInfo(userId2, stripeCustomerId, stripeSubscriptionId) {
-        const updates = {
-          stripeCustomerId,
-          updatedAt: /* @__PURE__ */ new Date()
-        };
-        if (stripeSubscriptionId) {
-          updates.stripeSubscriptionId = stripeSubscriptionId;
-          updates.subscriptionStatus = "active";
-        }
-        const [user] = await db.update(users).set(updates).where((0, import_drizzle_orm.eq)(users.id, userId2)).returning();
-        return user;
-      }
-      async updateSubscriptionStatus(userId2, status, endDate) {
-        const [user] = await db.update(users).set({
-          subscriptionStatus: status,
-          subscriptionEndDate: endDate,
-          updatedAt: /* @__PURE__ */ new Date()
-        }).where((0, import_drizzle_orm.eq)(users.id, userId2)).returning();
-        return user;
-      }
-      async updateUserTier(userId2, tierData) {
-        const [user] = await db.update(users).set({
-          ...tierData,
-          updatedAt: /* @__PURE__ */ new Date()
-        }).where((0, import_drizzle_orm.eq)(users.id, userId2)).returning();
-        return user;
-      }
-      // Guest file operations
-      setGuestFile(id, buffer, originalName) {
-        this.guestFiles.set(id, { buffer, originalName });
-        setTimeout(() => {
-          this.guestFiles.delete(id);
-        }, 60 * 60 * 1e3);
-      }
-      getGuestFile(id) {
-        return this.guestFiles.get(id) || null;
-      }
-      // Social sharing and rewards operations
-      async createSocialShare(shareData) {
-        const [share] = await db.insert(socialShares).values(shareData).returning();
-        return share;
-      }
-      async getUserShares(userId2, limit = 10) {
-        const shares = await db.select().from(socialShares).where((0, import_drizzle_orm.eq)(socialShares.userId, userId2)).orderBy(socialShares.sharedAt).limit(limit);
-        return shares;
-      }
-      async getUserRewards(userId2) {
-        const [rewards] = await db.select().from(userRewards).where((0, import_drizzle_orm.eq)(userRewards.userId, userId2));
-        return rewards;
-      }
-      async addRewardPoints(userId2, points, source, relatedId) {
-        let [rewards] = await db.select().from(userRewards).where((0, import_drizzle_orm.eq)(userRewards.userId, userId2));
-        if (!rewards) {
-          [rewards] = await db.insert(userRewards).values({
-            userId: userId2,
-            totalPoints: points,
-            totalEarned: points,
-            sharePoints: source === "social_share" ? points : 0,
-            referralPoints: source === "referral" ? points : 0
-          }).returning();
-        } else {
-          const newTotalPoints = rewards.totalPoints + points;
-          const newTotalEarned = rewards.totalEarned + points;
-          const newSharePoints = rewards.sharePoints + (source === "social_share" ? points : 0);
-          const newReferralPoints = rewards.referralPoints + (source === "referral" ? points : 0);
-          [rewards] = await db.update(userRewards).set({
-            totalPoints: newTotalPoints,
-            totalEarned: newTotalEarned,
-            sharePoints: newSharePoints,
-            referralPoints: newReferralPoints,
-            updatedAt: /* @__PURE__ */ new Date()
-          }).where((0, import_drizzle_orm.eq)(userRewards.userId, userId2)).returning();
-        }
-        await db.insert(rewardTransactions).values({
-          userId: userId2,
-          type: "earned",
-          source,
-          points,
-          description: `Earned ${points} points from ${source.replace("_", " ")}`,
-          relatedId
-        });
-        return rewards;
-      }
-      async updateUserDiscount(userId2, discountPercent) {
-        const [rewards] = await db.update(userRewards).set({
-          currentDiscountPercent: discountPercent,
-          updatedAt: /* @__PURE__ */ new Date()
-        }).where((0, import_drizzle_orm.eq)(userRewards.userId, userId2)).returning();
-        return rewards;
-      }
-      async getUserReferral(userId2) {
-        const [referral] = await db.select().from(userReferrals).where((0, import_drizzle_orm.eq)(userReferrals.userId, userId2));
-        return referral;
-      }
-      async createUserReferral(userId2, referralCode) {
-        const [referral] = await db.insert(userReferrals).values({
-          userId: userId2,
-          referralCode
-        }).returning();
-        return referral;
-      }
-      // Lead magnet operations
-      async getLeadMagnetSignup(email) {
-        const [signup] = await db.select().from(leadMagnetSignups).where((0, import_drizzle_orm.eq)(leadMagnetSignups.email, email));
-        return signup;
-      }
-      async getLeadMagnetSignupCountByIP(ipAddress) {
-        const today = /* @__PURE__ */ new Date();
-        today.setHours(0, 0, 0, 0);
-        const signups = await db.select().from(leadMagnetSignups).where(
-          (0, import_drizzle_orm.and)(
-            (0, import_drizzle_orm.eq)(leadMagnetSignups.ipAddress, ipAddress),
-            (0, import_drizzle_orm.gte)(leadMagnetSignups.signedUpAt, today)
-          )
-        );
-        return signups.length;
-      }
-      async createLeadMagnetSignup(signupData) {
-        const [signup] = await db.insert(leadMagnetSignups).values(signupData).returning();
-        return signup;
-      }
-      async deleteLeadMagnetSignup(id) {
-        const result = await db.delete(leadMagnetSignups).where((0, import_drizzle_orm.eq)(leadMagnetSignups.id, id));
-        return result.rowCount > 0;
-      }
-      async checkLeadMagnetCredits(email) {
-        const signup = await this.getLeadMagnetSignup(email);
-        if (!signup || signup.status !== "active") {
-          return { hasCredits: false, creditsRemaining: 0, expiresAt: null };
-        }
-        if (signup.expiresAt && /* @__PURE__ */ new Date() > signup.expiresAt) {
-          return { hasCredits: false, creditsRemaining: 0, expiresAt: signup.expiresAt };
-        }
-        const creditsRemaining = signup.creditsGranted - signup.creditsUsed;
-        return {
-          hasCredits: creditsRemaining > 0,
-          creditsRemaining,
-          expiresAt: signup.expiresAt
-        };
-      }
-      async useLeadMagnetCredits(email, creditsToUse) {
-        const creditCheck = await this.checkLeadMagnetCredits(email);
-        if (!creditCheck.hasCredits || creditCheck.creditsRemaining < creditsToUse) {
-          return false;
-        }
-        const signup = await this.getLeadMagnetSignup(email);
-        if (!signup) return false;
-        const newCreditsUsed = signup.creditsUsed + creditsToUse;
-        await db.update(leadMagnetSignups).set({
-          creditsUsed: newCreditsUsed,
-          lastUsed: /* @__PURE__ */ new Date()
-        }).where((0, import_drizzle_orm.eq)(leadMagnetSignups.email, email));
-        return true;
-      }
-      // Bonus operations claim methods - using purchasedCredits field as tracker
-      async claimBonusOperations(userId2) {
-        const user = await this.getUser(userId2);
-        if (!user) {
-          return { success: false };
-        }
-        if (user.purchasedCredits > 0) {
-          return { success: false, alreadyClaimed: true };
-        }
-        await this.updateUser(userId2, { purchasedCredits: 100 });
-        return { success: true };
-      }
-      async hasClaimedBonusOperations(userId2) {
-        const user = await this.getUser(userId2);
-        return (user?.purchasedCredits || 0) > 0;
-      }
-    };
-    storage = new DatabaseStorage();
-  }
-});
-
 // server/r2Service.ts
 var r2Service_exports = {};
 __export(r2Service_exports, {
@@ -1005,7 +678,21 @@ var DualUsageTracker_exports = {};
 __export(DualUsageTracker_exports, {
   DualUsageTracker: () => DualUsageTracker
 });
-var import_drizzle_orm2, DualUsageTracker;
+function getCachedUsage(key) {
+  const cached = usageCache.get(key);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.data;
+  }
+  usageCache.delete(key);
+  return null;
+}
+function setCachedUsage(key, data) {
+  usageCache.set(key, {
+    data,
+    timestamp: Date.now()
+  });
+}
+var import_drizzle_orm2, usageCache, CACHE_TTL, DualUsageTracker;
 var init_DualUsageTracker = __esm({
   "server/services/DualUsageTracker.ts"() {
     "use strict";
@@ -1013,6 +700,8 @@ var init_DualUsageTracker = __esm({
     init_operationLimits();
     init_schema();
     import_drizzle_orm2 = require("drizzle-orm");
+    usageCache = /* @__PURE__ */ new Map();
+    CACHE_TTL = 3e4;
     DualUsageTracker = class {
       userId;
       sessionId;
@@ -1166,11 +855,18 @@ var init_DualUsageTracker = __esm({
       async getCurrentUsage() {
         try {
           console.log("\u{1F4CA} DualUsageTracker.getCurrentUsage called for:", { userType: this.userType, userId: this.userId });
+          const cacheKey = `usage_${this.userId || "anonymous"}_${this.sessionId}`;
+          const cached = getCachedUsage(cacheKey);
+          if (cached) {
+            console.log("\u26A1 Using cached usage data - performance boost!");
+            return cached;
+          }
           const now = /* @__PURE__ */ new Date();
           const usageResult = await db.select().from(userUsage).where((0, import_drizzle_orm2.and)(
             (0, import_drizzle_orm2.eq)(userUsage.userId, this.userId || "anonymous"),
             (0, import_drizzle_orm2.eq)(userUsage.sessionId, this.sessionId)
           )).limit(1);
+          let usage;
           if (!usageResult || usageResult.length === 0) {
             const [newUsage] = await db.insert(userUsage).values({
               userId: this.userId || "anonymous",
@@ -1189,9 +885,10 @@ var init_DualUsageTracker = __esm({
               monthlyResetAt: new Date(now.getFullYear(), now.getMonth() + 1, 1)
               // Next month
             }).returning();
-            return newUsage;
+            usage = newUsage;
+          } else {
+            usage = usageResult[0];
           }
-          const usage = usageResult[0];
           const hourlyReset = new Date(usage.hourlyResetAt || /* @__PURE__ */ new Date());
           const dailyReset = new Date(usage.dailyResetAt || /* @__PURE__ */ new Date());
           const monthlyReset = new Date(usage.monthlyResetAt || /* @__PURE__ */ new Date());
@@ -1228,11 +925,13 @@ var init_DualUsageTracker = __esm({
               (0, import_drizzle_orm2.eq)(userUsage.sessionId, this.sessionId)
             ));
           }
+          setCachedUsage(cacheKey, usage);
+          console.log("\u{1F4BE} Cached usage data for faster future requests");
           return usage;
         } catch (error) {
           console.error("Error getting current usage (database may not be updated):", error);
           console.log("\u{1F504} Falling back to default usage values");
-          return {
+          const defaultUsage = {
             regularHourly: 0,
             regularDaily: 0,
             regularMonthly: 0,
@@ -1244,6 +943,9 @@ var init_DualUsageTracker = __esm({
             dailyResetAt: /* @__PURE__ */ new Date(),
             monthlyResetAt: /* @__PURE__ */ new Date()
           };
+          const cacheKey = `usage_${this.userId || "anonymous"}_${this.sessionId}`;
+          setCachedUsage(cacheKey, defaultUsage);
+          return defaultUsage;
         }
       }
       // Increment usage counters (with database fallback)
@@ -1272,6 +974,9 @@ var init_DualUsageTracker = __esm({
             ));
           }
           console.log(`\u2705 Usage incremented: ${fileType} operation for ${this.userType} user`);
+          const cacheKey = `usage_${this.userId || "anonymous"}_${this.sessionId}`;
+          usageCache.delete(cacheKey);
+          console.log("\u{1F5D1}\uFE0F Cache invalidated after usage increment");
         } catch (error) {
           console.error("Error incrementing usage (database may not be updated):", error);
           console.log("\u{1F504} Continuing without usage increment (fallback mode)");
@@ -1324,1379 +1029,56 @@ var init_DualUsageTracker = __esm({
   }
 });
 
-// server/redis.ts
-var redis_exports = {};
-__export(redis_exports, {
-  checkRedisHealth: () => checkRedisHealth,
-  closeRedisConnection: () => closeRedisConnection,
-  default: () => redis_default,
-  redis: () => redis,
-  safeRedis: () => safeRedis
-});
-function cleanRedisUrl(url) {
-  if (!url) return "redis://localhost:6379";
-  let cleanUrl = url;
-  try {
-    if (url.includes("%")) {
-      cleanUrl = decodeURIComponent(url);
-    }
-  } catch (e) {
-    console.warn("Failed to decode URL, using raw URL");
-  }
-  cleanUrl = cleanUrl.replace(/.*--tls.*-u\s*/, "");
-  cleanUrl = cleanUrl.replace(/^.*?(redis[s]?:\/\/)/, "$1");
-  cleanUrl = cleanUrl.trim();
-  const redisMatch = cleanUrl.match(/(redis[s]?:\/\/[^,\s]+)/);
-  if (redisMatch) {
-    cleanUrl = redisMatch[1];
-  }
-  return cleanUrl;
-}
-async function checkRedisHealth() {
-  try {
-    if (!redis) return false;
-    const result = await redis.ping();
-    return result === "PONG";
-  } catch (error) {
-    console.error("Redis health check failed:", error);
-    return false;
-  }
-}
-async function closeRedisConnection() {
-  try {
-    if (!redis) return;
-    await redis.quit();
-    console.log("Redis connection closed gracefully");
-  } catch (error) {
-    console.error("Error closing Redis connection:", error);
-  }
-}
-var import_ioredis, redisUrl, isUpstash, redisConfig, hasRedisConfig, connectionType, redis, SKIP_REDIS, safeRedis, redis_default;
-var init_redis = __esm({
-  "server/redis.ts"() {
-    "use strict";
-    import_ioredis = __toESM(require("ioredis"), 1);
-    redisUrl = cleanRedisUrl(process.env.REDIS_URL || process.env.UPSTASH_REDIS_URL || "redis://localhost:6379");
-    isUpstash = redisUrl.includes("upstash.io") || redisUrl.startsWith("rediss://");
-    redisConfig = {
-      // Connection options optimized for UpStash Redis cloud service
-      maxRetriesPerRequest: isUpstash ? 2 : 3,
-      enableReadyCheck: false,
-      lazyConnect: true,
-      // Increased timeouts for cloud Redis
-      connectTimeout: isUpstash ? 6e4 : 3e4,
-      commandTimeout: isUpstash ? 3e4 : 1e4,
-      // Keep-alive settings for stable connection
-      keepAlive: 3e4,
-      // Network settings
-      family: isUpstash ? 4 : void 0,
-      // Force IPv4 for Upstash
-      // Database settings
-      db: 0
-    };
-    hasRedisConfig = !!(process.env.REDIS_URL || process.env.UPSTASH_REDIS_URL);
-    connectionType = hasRedisConfig ? isUpstash ? "cloud" : "standard" : "local-fallback";
-    console.log("\u{1F527} Redis configuration:", {
-      configured: hasRedisConfig,
-      type: connectionType,
-      upstashOptimizations: isUpstash
-    });
-    redis = null;
-    SKIP_REDIS = process.env.NODE_ENV === "development";
-    if (SKIP_REDIS) {
-      console.warn("\u{1F6AB} Skipping Redis initialization in development mode due to quota limits");
-      redis = null;
-    } else {
-      try {
-        redis = new import_ioredis.default(redisUrl, {
-          ...redisConfig,
-          // Enhanced TLS configuration for Upstash Redis
-          tls: isUpstash || redisUrl.startsWith("rediss://") ? {
-            rejectUnauthorized: false,
-            // Accept Upstash SSL certificates
-            checkServerIdentity: () => void 0
-            // Skip hostname verification for Upstash
-          } : void 0
-          // Note: retryScheduler removed as it's not a valid Redis option
-          // Reconnection is handled by the connection event handlers below
-        });
-      } catch (error) {
-        console.warn("\u26A0\uFE0F  Redis connection failed:", error.message);
-        redis = null;
-      }
-    }
-    if (redis) {
-      redis.on("connect", () => {
-        console.log("\u2705 Redis connected successfully");
-      });
-      redis.on("ready", () => {
-        console.log("\u2705 Redis ready to accept commands");
-      });
-      redis.on("error", (error) => {
-        console.error("\u274C Redis connection error:", error.message);
-        if (error.message && error.message.includes("max requests limit exceeded")) {
-          console.warn("\u{1F6AB} Disabling Redis due to quota limit - using fallback storage");
-          redis = null;
-        }
-      });
-      redis.on("close", () => {
-        console.log("\u{1F534} Redis connection closed");
-      });
-      redis.on("reconnecting", () => {
-        console.log("\u{1F504} Redis reconnecting...");
-      });
-    }
-    safeRedis = {
-      async get(key) {
-        try {
-          if (!redis) return null;
-          return await redis.get(key);
-        } catch (error) {
-          console.warn("Redis GET failed, continuing without cache:", error);
-          return null;
-        }
-      },
-      async set(key, value, ...args) {
-        try {
-          if (!redis) return null;
-          return await redis.set(key, value, ...args);
-        } catch (error) {
-          console.warn("Redis SET failed, continuing without cache:", error);
-          return null;
-        }
-      },
-      async del(key) {
-        try {
-          if (!redis) return 0;
-          return await redis.del(key);
-        } catch (error) {
-          console.warn("Redis DEL failed, continuing without cache:", error);
-          return 0;
-        }
-      }
-    };
-    redis_default = redis;
-  }
-});
-
-// server/queueConfig.ts
-var queueConfig_exports = {};
-__export(queueConfig_exports, {
-  JOB_TYPES: () => JOB_TYPES,
-  QUEUE_PRIORITIES: () => QUEUE_PRIORITIES,
-  bulkQueue: () => bulkQueue,
-  checkQueueHealth: () => checkQueueHealth,
-  closeAllQueues: () => closeAllQueues,
-  getQueueStats: () => getQueueStats,
-  imageQueue: () => imageQueue,
-  rawQueue: () => rawQueue
-});
-async function checkQueueHealth() {
-  try {
-    const [imageHealth, rawHealth, bulkHealth] = await Promise.all([
-      imageQueue.client.ping().then(() => true).catch(() => false),
-      rawQueue.client.ping().then(() => true).catch(() => false),
-      bulkQueue.client.ping().then(() => true).catch(() => false)
-    ]);
-    return {
-      imageQueue: imageHealth,
-      rawQueue: rawHealth,
-      bulkQueue: bulkHealth
-    };
-  } catch (error) {
-    console.error("Queue health check failed:", error);
-    return {
-      imageQueue: false,
-      rawQueue: false,
-      bulkQueue: false
-    };
-  }
-}
-async function getQueueStats() {
-  try {
-    const [imageStats, rawStats, bulkStats] = await Promise.all([
-      Promise.all([
-        imageQueue.getWaiting(),
-        imageQueue.getActive(),
-        imageQueue.getCompleted(),
-        imageQueue.getFailed()
-      ]),
-      Promise.all([
-        rawQueue.getWaiting(),
-        rawQueue.getActive(),
-        rawQueue.getCompleted(),
-        rawQueue.getFailed()
-      ]),
-      Promise.all([
-        bulkQueue.getWaiting(),
-        bulkQueue.getActive(),
-        bulkQueue.getCompleted(),
-        bulkQueue.getFailed()
-      ])
-    ]);
-    return {
-      imageQueue: {
-        waiting: imageStats[0].length,
-        active: imageStats[1].length,
-        completed: imageStats[2].length,
-        failed: imageStats[3].length
-      },
-      rawQueue: {
-        waiting: rawStats[0].length,
-        active: rawStats[1].length,
-        completed: rawStats[2].length,
-        failed: rawStats[3].length
-      },
-      bulkQueue: {
-        waiting: bulkStats[0].length,
-        active: bulkStats[1].length,
-        completed: bulkStats[2].length,
-        failed: bulkStats[3].length
-      }
-    };
-  } catch (error) {
-    console.error("Failed to get queue stats:", error);
-    return null;
-  }
-}
-async function closeAllQueues() {
-  try {
-    await Promise.all([
-      imageQueue.close(),
-      rawQueue.close(),
-      bulkQueue.close()
-    ]);
-    console.log("All queues closed gracefully");
-  } catch (error) {
-    console.error("Error closing queues:", error);
-  }
-}
-var import_bull, queueConfig, imageQueue, rawQueue, bulkQueue, QUEUE_PRIORITIES, JOB_TYPES;
-var init_queueConfig = __esm({
-  "server/queueConfig.ts"() {
-    "use strict";
-    import_bull = __toESM(require("bull"), 1);
-    init_redis();
-    queueConfig = {
-      redis,
-      defaultJobOptions: {
-        removeOnComplete: 10,
-        // Keep last 10 completed jobs
-        removeOnFail: 20,
-        // Keep last 20 failed jobs for debugging
-        attempts: 3,
-        // Retry failed jobs 3 times
-        backoff: {
-          type: "exponential",
-          delay: 2e3
-          // Start with 2 second delay
-        }
-      },
-      settings: {
-        stalledInterval: 30 * 1e3,
-        // 30 seconds
-        maxStalledCount: 1
-        // Jobs become failed after 1 stall
-      }
-    };
-    imageQueue = new import_bull.default("image-processing", {
-      redis: {
-        host: redis.options.host,
-        port: redis.options.port,
-        password: redis.options.password,
-        db: redis.options.db,
-        ...redis.options.tls && { tls: redis.options.tls }
-      },
-      defaultJobOptions: {
-        ...queueConfig.defaultJobOptions,
-        delay: 0
-        // Process immediately
-      },
-      settings: queueConfig.settings
-    });
-    rawQueue = new import_bull.default("raw-processing", {
-      redis: {
-        host: redis.options.host,
-        port: redis.options.port,
-        password: redis.options.password,
-        db: redis.options.db,
-        ...redis.options.tls && { tls: redis.options.tls }
-      },
-      defaultJobOptions: {
-        ...queueConfig.defaultJobOptions,
-        delay: 0,
-        // Process immediately
-        timeout: 3e5
-        // 5 minute timeout for RAW processing
-      },
-      settings: queueConfig.settings
-    });
-    bulkQueue = new import_bull.default("bulk-processing", {
-      redis: {
-        host: redis.options.host,
-        port: redis.options.port,
-        password: redis.options.password,
-        db: redis.options.db,
-        ...redis.options.tls && { tls: redis.options.tls }
-      },
-      defaultJobOptions: {
-        ...queueConfig.defaultJobOptions,
-        delay: 1e3,
-        // 1 second delay to prevent overwhelming
-        timeout: 6e5
-        // 10 minute timeout for bulk operations
-      },
-      settings: queueConfig.settings
-    });
-    QUEUE_PRIORITIES = {
-      enterprise: 1,
-      // Highest priority
-      premium: 5,
-      // High priority  
-      test_premium: 5,
-      // High priority (same as premium)
-      free: 10,
-      // Normal priority
-      guest: 15
-      // Lowest priority
-    };
-    JOB_TYPES = {
-      COMPRESS_IMAGE: "compress-image",
-      PROCESS_RAW: "process-raw",
-      CONVERT_FORMAT: "convert-format",
-      BULK_PROCESS: "bulk-process"
-    };
-  }
-});
-
-// server/queueProcessors.ts
-var queueProcessors_exports = {};
-__export(queueProcessors_exports, {
-  addJobToQueue: () => addJobToQueue,
-  getJobStatus: () => getJobStatus,
-  initializeQueueProcessors: () => initializeQueueProcessors
-});
-async function performCompression(inputPath, outputPath, options = {}) {
-  const { quality = 80, width, height, format = "jpeg" } = options;
-  const originalStats = await import_fs4.default.promises.stat(inputPath);
-  const originalSize = originalStats.size;
-  let sharpInstance = (0, import_sharp4.default)(inputPath);
-  if (width || height) {
-    sharpInstance = sharpInstance.resize(width, height, {
-      fit: "inside",
-      withoutEnlargement: true
-    });
-  }
-  switch (format.toLowerCase()) {
-    case "jpeg":
-    case "jpg":
-      sharpInstance = sharpInstance.jpeg({ quality, progressive: true });
-      break;
-    case "png":
-      sharpInstance = sharpInstance.png({ quality: Math.floor(quality / 10) });
-      break;
-    case "webp":
-      sharpInstance = sharpInstance.webp({ quality });
-      break;
-    default:
-      sharpInstance = sharpInstance.jpeg({ quality, progressive: true });
-  }
-  await sharpInstance.toFile(outputPath);
-  const compressedStats = await import_fs4.default.promises.stat(outputPath);
-  const compressedSize = compressedStats.size;
-  const compressionRatio = (originalSize - compressedSize) / originalSize * 100;
-  return {
-    originalSize,
-    compressedSize,
-    compressionRatio
-  };
-}
-async function processImageCompression(job) {
-  const { filePath, fileName, sessionId, userId: userId2, userTier, options, outputPath } = job.data;
-  console.log(`\u{1F504} Processing image compression job ${job.id} for ${userTier} user (${fileName})`);
-  try {
-    await job.progress(10);
-    if (!import_fs4.default.existsSync(filePath)) {
-      throw new Error(`Input file not found: ${filePath}`);
-    }
-    await job.progress(25);
-    const result = await performCompression(filePath, outputPath, options);
-    await job.progress(90);
-    let r2UploadResult = null;
-    try {
-      console.log(`\u{1F4E4} Uploading compressed image to R2: ${fileName}`);
-      r2UploadResult = await r2Service.uploadFile(outputPath, fileName, {
-        folder: R2_FOLDERS.COMPRESSED,
-        contentType: "image/jpeg",
-        metadata: {
-          originalSize: result.originalSize.toString(),
-          compressedSize: result.compressedSize.toString(),
-          compressionRatio: result.compressionRatio.toString(),
-          sessionId,
-          userId: userId2 || "anonymous",
-          userTier,
-          processedAt: (/* @__PURE__ */ new Date()).toISOString()
-        }
-      });
-      console.log(`\u2705 Successfully uploaded to R2: ${r2UploadResult.cdnUrl}`);
-      try {
-        await import_fs4.default.promises.unlink(outputPath);
-        console.log(`\u{1F5D1}\uFE0F Cleaned up local compressed file: ${outputPath}`);
-      } catch (cleanupError) {
-        console.warn(`Failed to clean up compressed file ${outputPath}:`, cleanupError);
-      }
-    } catch (r2Error) {
-      console.error(`\u274C Failed to upload to R2: ${r2Error instanceof Error ? r2Error.message : "Unknown error"}`);
-    }
-    if (filePath.includes("/uploads/")) {
-      try {
-        await import_fs4.default.promises.unlink(filePath);
-      } catch (cleanupError) {
-        console.warn(`Failed to clean up input file ${filePath}:`, cleanupError);
-      }
-    }
-    await job.progress(100);
-    console.log(`\u2705 Completed image compression job ${job.id} for ${fileName}`);
-    return {
-      success: true,
-      fileName,
-      originalPath: filePath,
-      compressedPath: outputPath,
-      originalSize: result.originalSize,
-      compressedSize: result.compressedSize,
-      compressionRatio: result.compressionRatio,
-      processingTime: Date.now() - job.timestamp,
-      sessionId,
-      userId: userId2,
-      // R2 CDN data
-      r2Key: r2UploadResult?.key,
-      cdnUrl: r2UploadResult?.cdnUrl,
-      r2UploadSuccess: !!r2UploadResult
-    };
-  } catch (error) {
-    console.error(`\u274C Image compression job ${job.id} failed:`, error);
-    await job.progress(0);
-    throw error;
-  }
-}
-async function processRAWConversion(job) {
-  const { filePath, fileName, sessionId, userId: userId2, userTier, outputFormat, outputPath } = job.data;
-  console.log(`\u{1F504} Processing RAW conversion job ${job.id} for ${userTier} user (${fileName})`);
-  try {
-    await job.progress(10);
-    if (!import_fs4.default.existsSync(filePath)) {
-      throw new Error(`Input RAW file not found: ${filePath}`);
-    }
-    await job.progress(25);
-    console.log(`Processing RAW file: ${fileName} to ${outputFormat}`);
-    await job.progress(75);
-    await new Promise((resolve) => setTimeout(resolve, 2e3));
-    await import_fs4.default.promises.copyFile(filePath, outputPath);
-    await job.progress(100);
-    console.log(`\u2705 Completed RAW conversion job ${job.id} for ${fileName}`);
-    return {
-      success: true,
-      fileName,
-      originalPath: filePath,
-      convertedPath: outputPath,
-      outputFormat,
-      processingTime: Date.now() - job.timestamp,
-      sessionId,
-      userId: userId2
-    };
-  } catch (error) {
-    console.error(`\u274C RAW conversion job ${job.id} failed:`, error);
-    await job.progress(0);
-    throw error;
-  }
-}
-async function processBulkCompression(job) {
-  const { files, sessionId, userId: userId2, userTier, zipOutputPath } = job.data;
-  console.log(`\u{1F504} Processing bulk compression job ${job.id} for ${userTier} user (${files.length} files)`);
-  try {
-    const results = [];
-    const totalFiles = files.length;
-    await job.progress(5);
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const progress = Math.floor((i + 1) / totalFiles * 90) + 5;
-      console.log(`Processing file ${i + 1}/${totalFiles}: ${file.fileName}`);
-      try {
-        const outputPath = import_path4.default.join("compressed", `${Date.now()}_${file.fileName}`);
-        const result = await performCompression(file.filePath, outputPath, file.options);
-        results.push({
-          fileName: file.fileName,
-          success: true,
-          originalSize: result.originalSize,
-          compressedSize: result.compressedSize,
-          compressionRatio: result.compressionRatio,
-          outputPath
-        });
-      } catch (fileError) {
-        console.error(`Failed to process ${file.fileName}:`, fileError);
-        results.push({
-          fileName: file.fileName,
-          success: false,
-          error: fileError.message
-        });
-      }
-      await job.progress(progress);
-    }
-    await job.progress(95);
-    console.log(`Creating ZIP archive: ${zipOutputPath}`);
-    await job.progress(100);
-    console.log(`\u2705 Completed bulk compression job ${job.id} (${results.filter((r) => r.success).length}/${totalFiles} successful)`);
-    return {
-      success: true,
-      totalFiles,
-      successfulFiles: results.filter((r) => r.success).length,
-      failedFiles: results.filter((r) => !r.success).length,
-      results,
-      zipPath: zipOutputPath,
-      processingTime: Date.now() - job.timestamp,
-      sessionId,
-      userId: userId2
-    };
-  } catch (error) {
-    console.error(`\u274C Bulk compression job ${job.id} failed:`, error);
-    await job.progress(0);
-    throw error;
-  }
-}
-function initializeQueueProcessors() {
-  console.log("\u{1F527} Initializing queue processors...");
-  try {
-    imageQueue.process(JOB_TYPES.COMPRESS_IMAGE, 2, processImageCompression);
-    imageQueue.process(JOB_TYPES.CONVERT_FORMAT, 2, processImageCompression);
-    rawQueue.process(JOB_TYPES.PROCESS_RAW, 1, processRAWConversion);
-    bulkQueue.process(JOB_TYPES.BULK_PROCESS, 1, processBulkCompression);
-    [imageQueue, rawQueue, bulkQueue].forEach((queue) => {
-      queue.on("completed", (job, result) => {
-        console.log(`\u2705 Job ${job.id} completed in queue ${queue.name}`);
-      });
-      queue.on("failed", (job, err) => {
-        console.error(`\u274C Job ${job.id} failed in queue ${queue.name}:`, err.message);
-      });
-      queue.on("stalled", (job) => {
-        console.warn(`\u26A0\uFE0F  Job ${job.id} stalled in queue ${queue.name}`);
-      });
-      queue.on("progress", (job, progress) => {
-        console.log(`\u{1F4CA} Job ${job.id} progress: ${progress}%`);
-      });
-    });
-    console.log("\u2705 Queue processors initialized successfully");
-  } catch (error) {
-    console.error("\u274C Failed to initialize queue processors:", error);
-    throw error;
-  }
-}
-async function addJobToQueue(jobType, jobData, userTier = "free", options = {}) {
-  try {
-    let queue;
-    switch (jobType) {
-      case "PROCESS_RAW":
-        queue = rawQueue;
-        break;
-      case "BULK_PROCESS":
-        queue = bulkQueue;
-        break;
-      case "COMPRESS_IMAGE":
-      case "CONVERT_FORMAT":
-      default:
-        queue = imageQueue;
-        break;
-    }
-    const priorities = {
-      enterprise: 1,
-      premium: 5,
-      test_premium: 5,
-      free: 10,
-      guest: 15
-    };
-    const priority = priorities[userTier] || 10;
-    const job = await queue.add(JOB_TYPES[jobType], jobData, {
-      priority,
-      removeOnComplete: 10,
-      removeOnFail: 20,
-      attempts: 3,
-      backoff: {
-        type: "exponential",
-        delay: 2e3
-      },
-      ...options
-    });
-    console.log(`\u2795 Added ${jobType} job ${job.id} to queue with priority ${priority} (${userTier} tier)`);
-    return job;
-  } catch (error) {
-    console.error(`\u274C Failed to add ${jobType} job to queue:`, error);
-    throw error;
-  }
-}
-async function getJobStatus(jobId) {
-  const queues = [imageQueue, rawQueue, bulkQueue];
-  for (const queue of queues) {
-    try {
-      const job = await queue.getJob(jobId);
-      if (job) {
-        const state = await job.getState();
-        return {
-          id: job.id,
-          state,
-          progress: job.progress(),
-          data: job.data,
-          result: state === "completed" ? job.returnvalue : null,
-          error: state === "failed" ? job.failedReason : null,
-          attempts: job.attemptsMade,
-          maxAttempts: job.opts.attempts,
-          priority: job.opts.priority,
-          createdAt: new Date(job.timestamp),
-          processedAt: job.processedOn ? new Date(job.processedOn) : null,
-          finishedAt: job.finishedOn ? new Date(job.finishedOn) : null,
-          queueName: queue.name
-        };
-      }
-    } catch (error) {
-      console.error(`Error checking job ${jobId} in queue ${queue.name}:`, error);
-    }
-  }
-  return null;
-}
-var import_path4, import_fs4, import_sharp4;
-var init_queueProcessors = __esm({
-  "server/queueProcessors.ts"() {
-    "use strict";
-    init_queueConfig();
-    import_path4 = __toESM(require("path"), 1);
-    import_fs4 = __toESM(require("fs"), 1);
-    import_sharp4 = __toESM(require("sharp"), 1);
-    init_r2Service();
-  }
-});
-
 // server/queueService.ts
 var queueService_exports = {};
 __export(queueService_exports, {
-  JOB_TYPES: () => JOB_TYPES2,
-  QUEUE_PRIORITIES: () => QUEUE_PRIORITIES2,
-  addJobToQueue: () => addJobToQueue2,
-  bulkQueue: () => bulkQueue2,
-  getJobStatus: () => getJobStatus2,
+  JOB_TYPES: () => JOB_TYPES,
+  QUEUE_PRIORITIES: () => QUEUE_PRIORITIES,
+  addJobToQueue: () => addJobToQueue,
+  bulkQueue: () => bulkQueue,
+  getJobStatus: () => getJobStatus,
   getQueueServiceStatus: () => getQueueServiceStatus,
-  imageQueue: () => imageQueue2,
+  imageQueue: () => imageQueue,
   initializeQueueService: () => initializeQueueService,
-  rawQueue: () => rawQueue2,
-  redis: () => redis2,
+  rawQueue: () => rawQueue,
+  redis: () => redis,
   shutdownQueueService: () => shutdownQueueService
 });
-async function loadRedisModules() {
-  try {
-    const redisModule = await Promise.race([
-      Promise.resolve().then(() => (init_redis(), redis_exports)),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Import timeout")), 3e3))
-    ]);
-    const queueConfigModule = await Promise.resolve().then(() => (init_queueConfig(), queueConfig_exports));
-    const queueProcessorsModule = await Promise.resolve().then(() => (init_queueProcessors(), queueProcessors_exports));
-    redis2 = redisModule.redis;
-    checkRedisHealth2 = redisModule.checkRedisHealth;
-    closeRedisConnection2 = redisModule.closeRedisConnection;
-    imageQueue2 = queueConfigModule.imageQueue;
-    rawQueue2 = queueConfigModule.rawQueue;
-    bulkQueue2 = queueConfigModule.bulkQueue;
-    checkQueueHealth2 = queueConfigModule.checkQueueHealth;
-    getQueueStats2 = queueConfigModule.getQueueStats;
-    closeAllQueues2 = queueConfigModule.closeAllQueues;
-    QUEUE_PRIORITIES2 = queueConfigModule.QUEUE_PRIORITIES;
-    JOB_TYPES2 = queueConfigModule.JOB_TYPES;
-    initializeQueueProcessors2 = queueProcessorsModule.initializeQueueProcessors;
-    addJob = queueProcessorsModule.addJobToQueue;
-    getJobStatus2 = queueProcessorsModule.getJobStatus;
-    return true;
-  } catch (error) {
-    console.warn("\u26A0\uFE0F  Failed to load Redis modules (Redis unavailable):", error.message || error);
-    return false;
-  }
-}
 async function initializeQueueService() {
-  try {
-    console.log("\u{1F680} Initializing queue service...");
-    const modulesLoaded = await Promise.race([
-      loadRedisModules(),
-      new Promise((resolve) => setTimeout(() => resolve(false), 2e3))
-      // 2 second timeout
-    ]);
-    if (!modulesLoaded) {
-      console.warn("\u26A0\uFE0F  Redis modules failed to load or timed out - skipping queue initialization");
-      return false;
-    }
-    const redisHealth = await Promise.race([
-      checkRedisHealth2(),
-      new Promise((resolve) => setTimeout(() => resolve(false), 1e3))
-      // 1 second timeout
-    ]);
-    if (!redisHealth) {
-      console.warn("\u26A0\uFE0F  Redis connection failed or timed out - skipping queue initialization");
-      return false;
-    }
-    const queueHealth = await checkQueueHealth2();
-    const allQueuesHealthy = Object.values(queueHealth).every(Boolean);
-    if (!allQueuesHealthy) {
-      console.warn("\u26A0\uFE0F  One or more queues failed to initialize:", queueHealth);
-      return false;
-    }
-    initializeQueueProcessors2();
-    console.log("\u2705 Queue service initialized successfully");
-    console.log("\u{1F4CA} Queue status:", queueHealth);
-    return true;
-  } catch (error) {
-    console.warn("\u26A0\uFE0F  Failed to initialize queue service:", error);
-    return false;
-  }
+  console.log("\u{1F680} Queue service disabled - Redis has been eliminated for performance");
+  return false;
 }
 async function getQueueServiceStatus() {
-  if (!checkRedisHealth2 || !checkQueueHealth2) {
-    return {
-      redis: false,
-      queues: {
-        imageQueue: false,
-        rawQueue: false,
-        bulkQueue: false
-      }
-    };
-  }
-  const redisHealth = await checkRedisHealth2();
-  const queueHealth = await checkQueueHealth2();
-  const stats = redisHealth && getQueueStats2 ? await getQueueStats2() : null;
   return {
-    redis: redisHealth,
-    queues: queueHealth,
-    ...stats && { stats }
+    redis: false,
+    queues: {
+      imageQueue: false,
+      rawQueue: false,
+      bulkQueue: false
+    }
   };
 }
 async function shutdownQueueService() {
-  try {
-    console.log("\u{1F504} Shutting down queue service...");
-    if (closeAllQueues2) {
-      await closeAllQueues2();
-    }
-    if (closeRedisConnection2) {
-      await closeRedisConnection2();
-    }
-    console.log("\u2705 Queue service shut down gracefully");
-  } catch (error) {
-    console.warn("\u26A0\uFE0F  Error during queue service shutdown:", error);
-  }
+  console.log("\u2705 Queue service shutdown complete (Redis eliminated)");
 }
-var redis2, checkRedisHealth2, closeRedisConnection2, imageQueue2, rawQueue2, bulkQueue2, checkQueueHealth2, getQueueStats2, closeAllQueues2, QUEUE_PRIORITIES2, JOB_TYPES2, initializeQueueProcessors2, addJob, getJobStatus2, addJobToQueue2;
+var addJobToQueue, getJobStatus, redis, imageQueue, rawQueue, bulkQueue, QUEUE_PRIORITIES, JOB_TYPES;
 var init_queueService = __esm({
   "server/queueService.ts"() {
     "use strict";
-    redis2 = null;
-    checkRedisHealth2 = null;
-    closeRedisConnection2 = null;
-    imageQueue2 = null;
-    rawQueue2 = null;
-    bulkQueue2 = null;
-    checkQueueHealth2 = null;
-    getQueueStats2 = null;
-    closeAllQueues2 = null;
-    QUEUE_PRIORITIES2 = null;
-    JOB_TYPES2 = null;
-    initializeQueueProcessors2 = null;
-    addJob = null;
-    getJobStatus2 = null;
-    addJobToQueue2 = addJob;
-  }
-});
-
-// server/cacheService.ts
-var CacheService, cacheService, CACHE_NAMESPACES, CACHE_TTL;
-var init_cacheService = __esm({
-  "server/cacheService.ts"() {
-    "use strict";
-    init_redis();
-    CacheService = class {
-      config;
-      metrics;
-      constructor(config = {}) {
-        this.config = {
-          defaultTTL: 300,
-          // 5 minutes default
-          keyPrefix: "microjpeg:cache:",
-          ...config
-        };
-        this.metrics = {
-          hits: 0,
-          misses: 0,
-          hitRate: 0,
-          totalRequests: 0
-        };
-      }
-      generateKey(namespace, identifier) {
-        return `${this.config.keyPrefix}${namespace}:${identifier}`;
-      }
-      updateMetrics(isHit) {
-        this.metrics.totalRequests++;
-        if (isHit) {
-          this.metrics.hits++;
-        } else {
-          this.metrics.misses++;
-        }
-        this.metrics.hitRate = this.metrics.hits / this.metrics.totalRequests * 100;
-      }
-      /**
-       * Get cached data
-       */
-      async get(namespace, key) {
-        try {
-          const cacheKey = this.generateKey(namespace, key);
-          const cached = await redis.get(cacheKey);
-          if (cached) {
-            this.updateMetrics(true);
-            return JSON.parse(cached);
-          }
-          this.updateMetrics(false);
-          return null;
-        } catch (error) {
-          console.error(`Cache get error for ${namespace}:${key}:`, error);
-          this.updateMetrics(false);
-          return null;
-        }
-      }
-      /**
-       * Set cached data with TTL
-       */
-      async set(namespace, key, data, ttl) {
-        try {
-          const cacheKey = this.generateKey(namespace, key);
-          const value = JSON.stringify(data);
-          const expiry = ttl || this.config.defaultTTL;
-          await redis.setex(cacheKey, expiry, value);
-          return true;
-        } catch (error) {
-          console.error(`Cache set error for ${namespace}:${key}:`, error);
-          return false;
-        }
-      }
-      /**
-       * Delete cached data
-       */
-      async delete(namespace, key) {
-        try {
-          const cacheKey = this.generateKey(namespace, key);
-          const result = await redis.del(cacheKey);
-          return result > 0;
-        } catch (error) {
-          console.error(`Cache delete error for ${namespace}:${key}:`, error);
-          return false;
-        }
-      }
-      /**
-       * Delete all keys matching a pattern
-       */
-      async deletePattern(pattern) {
-        try {
-          const fullPattern = `${this.config.keyPrefix}${pattern}`;
-          const keys = await redis.keys(fullPattern);
-          if (keys.length === 0) {
-            return 0;
-          }
-          const result = await redis.del(...keys);
-          return result;
-        } catch (error) {
-          console.error(`Cache delete pattern error for ${pattern}:`, error);
-          return 0;
-        }
-      }
-      /**
-       * Check if key exists in cache
-       */
-      async exists(namespace, key) {
-        try {
-          const cacheKey = this.generateKey(namespace, key);
-          const result = await redis.exists(cacheKey);
-          return result === 1;
-        } catch (error) {
-          console.error(`Cache exists error for ${namespace}:${key}:`, error);
-          return false;
-        }
-      }
-      /**
-       * Get or set pattern - retrieve from cache or execute function and cache result
-       */
-      async getOrSet(namespace, key, fetchFunction, ttl) {
-        const cached = await this.get(namespace, key);
-        if (cached !== null) {
-          return cached;
-        }
-        try {
-          const freshData = await fetchFunction();
-          await this.set(namespace, key, freshData, ttl);
-          return freshData;
-        } catch (error) {
-          console.error(`getOrSet fetch error for ${namespace}:${key}:`, error);
-          throw error;
-        }
-      }
-      /**
-       * Batch get multiple keys
-       */
-      async mget(namespace, keys) {
-        try {
-          const cacheKeys = keys.map((key) => this.generateKey(namespace, key));
-          const values = await redis.mget(...cacheKeys);
-          const result = {};
-          keys.forEach((key, index) => {
-            const value = values[index];
-            if (value) {
-              try {
-                result[key] = JSON.parse(value);
-                this.updateMetrics(true);
-              } catch (parseError) {
-                result[key] = null;
-                this.updateMetrics(false);
-              }
-            } else {
-              result[key] = null;
-              this.updateMetrics(false);
-            }
-          });
-          return result;
-        } catch (error) {
-          console.error(`Cache mget error for ${namespace}:`, error);
-          const result = {};
-          keys.forEach((key) => {
-            result[key] = null;
-            this.updateMetrics(false);
-          });
-          return result;
-        }
-      }
-      /**
-       * Batch set multiple keys
-       */
-      async mset(namespace, data, ttl) {
-        try {
-          const expiry = ttl || this.config.defaultTTL;
-          const pipeline = redis.pipeline();
-          Object.entries(data).forEach(([key, value]) => {
-            const cacheKey = this.generateKey(namespace, key);
-            pipeline.setex(cacheKey, expiry, JSON.stringify(value));
-          });
-          await pipeline.exec();
-          return true;
-        } catch (error) {
-          console.error(`Cache mset error for ${namespace}:`, error);
-          return false;
-        }
-      }
-      /**
-       * Get cache metrics
-       */
-      getMetrics() {
-        return { ...this.metrics };
-      }
-      /**
-       * Reset cache metrics
-       */
-      resetMetrics() {
-        this.metrics = {
-          hits: 0,
-          misses: 0,
-          hitRate: 0,
-          totalRequests: 0
-        };
-      }
-      /**
-       * Get cache info and statistics
-       */
-      async getCacheInfo() {
-        try {
-          const info = await redis.info("memory");
-          const keyCount = await redis.dbsize();
-          return {
-            metrics: this.getMetrics(),
-            redis: {
-              keyCount,
-              memoryInfo: this.parseRedisInfo(info)
-            }
-          };
-        } catch (error) {
-          console.error("Error getting cache info:", error);
-          return {
-            metrics: this.getMetrics(),
-            redis: {
-              keyCount: 0,
-              memoryInfo: {}
-            }
-          };
-        }
-      }
-      parseRedisInfo(info) {
-        const result = {};
-        info.split("\r\n").forEach((line) => {
-          if (line.includes(":")) {
-            const [key, value] = line.split(":");
-            result[key] = value;
-          }
-        });
-        return result;
-      }
+    addJobToQueue = () => {
+      console.log("Queue service disabled - Redis eliminated");
+      return null;
     };
-    cacheService = new CacheService({
-      defaultTTL: 300,
-      // 5 minutes
-      keyPrefix: "microjpeg:cache:"
-    });
-    CACHE_NAMESPACES = {
-      USER: "user",
-      USAGE_STATS: "usage_stats",
-      COMPRESSION_JOBS: "compression_jobs",
-      SUBSCRIPTIONS: "subscriptions",
-      API_LIMITS: "api_limits",
-      PRICING: "pricing",
-      SESSIONS: "sessions"
+    getJobStatus = () => {
+      console.log("Queue service disabled - Redis eliminated");
+      return null;
     };
-    CACHE_TTL = {
-      USER_DATA: 600,
-      // 10 minutes - user info changes infrequently
-      USAGE_STATS: 300,
-      // 5 minutes - usage data updates regularly
-      COMPRESSION_JOBS: 120,
-      // 2 minutes - job status changes frequently
-      SUBSCRIPTIONS: 900,
-      // 15 minutes - subscription info stable
-      API_LIMITS: 60,
-      // 1 minute - limits need to be fresh
-      PRICING: 3600,
-      // 1 hour - pricing rarely changes
-      SESSIONS: 1800
-      // 30 minutes - session data
-    };
-  }
-});
-
-// server/cachedStorage.ts
-var cachedStorage_exports = {};
-__export(cachedStorage_exports, {
-  CachedStorage: () => CachedStorage,
-  cachedStorage: () => cachedStorage
-});
-var CachedStorage, cachedStorage;
-var init_cachedStorage = __esm({
-  "server/cachedStorage.ts"() {
-    "use strict";
-    init_storage();
-    init_cacheService();
-    CachedStorage = class {
-      // User operations with caching
-      async getUser(id) {
-        return cacheService.getOrSet(
-          CACHE_NAMESPACES.USER,
-          id,
-          async () => storage.getUser(id),
-          CACHE_TTL.USER_DATA
-        );
-      }
-      async getUserByEmail(email) {
-        return cacheService.getOrSet(
-          CACHE_NAMESPACES.USER,
-          `email:${email}`,
-          async () => storage.getUserByEmail(email),
-          CACHE_TTL.USER_DATA
-        );
-      }
-      async createUser(insertUser) {
-        const user = await storage.createUser(insertUser);
-        await cacheService.set(CACHE_NAMESPACES.USER, user.id, user, CACHE_TTL.USER_DATA);
-        if (user.email) {
-          await cacheService.set(CACHE_NAMESPACES.USER, `email:${user.email}`, user, CACHE_TTL.USER_DATA);
-        }
-        return user;
-      }
-      async updateUser(id, updates) {
-        const user = await storage.updateUser(id, updates);
-        if (user) {
-          await this.invalidateUserCache(user);
-          await cacheService.set(CACHE_NAMESPACES.USER, user.id, user, CACHE_TTL.USER_DATA);
-          if (user.email) {
-            await cacheService.set(CACHE_NAMESPACES.USER, `email:${user.email}`, user, CACHE_TTL.USER_DATA);
-          }
-        }
-        return user;
-      }
-      async upsertUser(userData) {
-        const user = await storage.upsertUser(userData);
-        await cacheService.set(CACHE_NAMESPACES.USER, user.id, user, CACHE_TTL.USER_DATA);
-        if (user.email) {
-          await cacheService.set(CACHE_NAMESPACES.USER, `email:${user.email}`, user, CACHE_TTL.USER_DATA);
-        }
-        return user;
-      }
-      // Compression job operations with caching
-      async createCompressionJob(insertJob) {
-        const job = await storage.createCompressionJob(insertJob);
-        await cacheService.set(CACHE_NAMESPACES.COMPRESSION_JOBS, job.id, job, CACHE_TTL.COMPRESSION_JOBS);
-        if (job.userId) {
-          await cacheService.delete(CACHE_NAMESPACES.COMPRESSION_JOBS, `user:${job.userId}`);
-        }
-        if (job.sessionId) {
-          await cacheService.delete(CACHE_NAMESPACES.COMPRESSION_JOBS, `session:${job.sessionId}`);
-        }
-        return job;
-      }
-      async getCompressionJob(id) {
-        return cacheService.getOrSet(
-          CACHE_NAMESPACES.COMPRESSION_JOBS,
-          id,
-          async () => storage.getCompressionJob(id),
-          CACHE_TTL.COMPRESSION_JOBS
-        );
-      }
-      async getJobsByIds(ids) {
-        const cached = await cacheService.mget(CACHE_NAMESPACES.COMPRESSION_JOBS, ids);
-        const cachedJobs = [];
-        const missedIds = [];
-        ids.forEach((id) => {
-          const cachedJob = cached[id];
-          if (cachedJob) {
-            cachedJobs.push(cachedJob);
-          } else {
-            missedIds.push(id);
-          }
-        });
-        let missedJobs = [];
-        if (missedIds.length > 0) {
-          missedJobs = await storage.getJobsByIds(missedIds);
-          const cacheData = {};
-          missedJobs.forEach((job) => {
-            cacheData[job.id] = job;
-          });
-          await cacheService.mset(CACHE_NAMESPACES.COMPRESSION_JOBS, cacheData, CACHE_TTL.COMPRESSION_JOBS);
-        }
-        return [...cachedJobs, ...missedJobs];
-      }
-      async updateCompressionJob(id, updates) {
-        const job = await storage.updateCompressionJob(id, updates);
-        if (job) {
-          await cacheService.set(CACHE_NAMESPACES.COMPRESSION_JOBS, job.id, job, CACHE_TTL.COMPRESSION_JOBS);
-          if (job.userId) {
-            await cacheService.delete(CACHE_NAMESPACES.COMPRESSION_JOBS, `user:${job.userId}`);
-          }
-          if (job.sessionId) {
-            await cacheService.delete(CACHE_NAMESPACES.COMPRESSION_JOBS, `session:${job.sessionId}`);
-          }
-        }
-        return job;
-      }
-      async getAllCompressionJobs(userId2) {
-        const cacheKey = userId2 ? `user:${userId2}` : "all";
-        return cacheService.getOrSet(
-          CACHE_NAMESPACES.COMPRESSION_JOBS,
-          cacheKey,
-          async () => storage.getAllCompressionJobs(userId2),
-          CACHE_TTL.COMPRESSION_JOBS
-        );
-      }
-      async getCompressionJobsBySession(sessionId) {
-        return cacheService.getOrSet(
-          CACHE_NAMESPACES.COMPRESSION_JOBS,
-          `session:${sessionId}`,
-          async () => storage.getCompressionJobsBySession(sessionId),
-          CACHE_TTL.COMPRESSION_JOBS
-        );
-      }
-      async deleteCompressionJob(id) {
-        const result = await storage.deleteCompressionJob(id);
-        if (result) {
-          await cacheService.delete(CACHE_NAMESPACES.COMPRESSION_JOBS, id);
-          await cacheService.deletePattern(`${CACHE_NAMESPACES.COMPRESSION_JOBS}:user:*`);
-          await cacheService.deletePattern(`${CACHE_NAMESPACES.COMPRESSION_JOBS}:session:*`);
-        }
-        return result;
-      }
-      // Usage statistics caching
-      async getUserUsageStats(userId2) {
-        return cacheService.getOrSet(
-          CACHE_NAMESPACES.USAGE_STATS,
-          `user:${userId2}`,
-          async () => {
-            const user = await this.getUser(userId2);
-            if (!user) return null;
-            return {
-              monthlyOperations: user.monthlyOperations || 0,
-              dailyOperations: user.dailyOperations || 0,
-              hourlyOperations: user.hourlyOperations || 0,
-              bytesProcessed: user.bytesProcessed || 0,
-              lastOperationAt: user.lastOperationAt
-            };
-          },
-          CACHE_TTL.USAGE_STATS
-        );
-      }
-      // API limits and subscription info caching
-      async getUserSubscriptionInfo(userId2) {
-        return cacheService.getOrSet(
-          CACHE_NAMESPACES.SUBSCRIPTIONS,
-          userId2,
-          async () => {
-            const user = await this.getUser(userId2);
-            if (!user) return null;
-            return {
-              subscriptionTier: user.subscriptionTier,
-              subscriptionStatus: user.subscriptionStatus,
-              subscriptionEndDate: user.subscriptionEndDate,
-              isPremium: user.isPremium,
-              stripeCustomerId: user.stripeCustomerId,
-              stripeSubscriptionId: user.stripeSubscriptionId
-            };
-          },
-          CACHE_TTL.SUBSCRIPTIONS
-        );
-      }
-      // Cache invalidation helpers
-      async invalidateUserCache(user) {
-        const invalidationPromises = [
-          cacheService.delete(CACHE_NAMESPACES.USER, user.id),
-          cacheService.delete(CACHE_NAMESPACES.USAGE_STATS, `user:${user.id}`),
-          cacheService.delete(CACHE_NAMESPACES.SUBSCRIPTIONS, user.id)
-        ];
-        if (user.email) {
-          invalidationPromises.push(
-            cacheService.delete(CACHE_NAMESPACES.USER, `email:${user.email}`)
-          );
-        }
-        await Promise.all(invalidationPromises);
-      }
-      // Direct delegation to storage for operations that don't need caching
-      async getUserByVerificationToken(token) {
-        return storage.getUserByVerificationToken(token);
-      }
-      async verifyUserEmail(userId2) {
-        const user = await storage.verifyUserEmail(userId2);
-        if (user) {
-          await this.invalidateUserCache(user);
-        }
-        return user;
-      }
-      async togglePremiumStatus(userId2) {
-        const user = await storage.togglePremiumStatus(userId2);
-        if (user) {
-          await this.invalidateUserCache(user);
-        }
-        return user;
-      }
-      async updateSubscriptionStatus(userId2, status, endDate) {
-        const user = await storage.updateSubscriptionStatus(userId2, status, endDate);
-        if (user) {
-          await this.invalidateUserCache(user);
-        }
-        return user;
-      }
-      // Guest file storage (in-memory, no caching needed)
-      storeGuestFile(sessionId, file) {
-        return storage.storeGuestFile(sessionId, file);
-      }
-      getGuestFile(sessionId) {
-        return storage.getGuestFile(sessionId);
-      }
-      deleteGuestFile(sessionId) {
-        return storage.deleteGuestFile(sessionId);
-      }
-      // API key operations (no caching for security)
-      async createApiKey(insertApiKey) {
-        return storage.createApiKey(insertApiKey);
-      }
-      async getApiKey(keyHash) {
-        return storage.getApiKey(keyHash);
-      }
-      async getApiKeysByUserId(userId2) {
-        return storage.getApiKeysByUserId(userId2);
-      }
-      async updateApiKey(id, updates) {
-        return storage.updateApiKey(id, updates);
-      }
-      async deleteApiKey(id) {
-        return storage.deleteApiKey(id);
-      }
-      async incrementApiKeyUsage(keyHash) {
-        return storage.incrementApiKeyUsage(keyHash);
-      }
-      // Social and rewards (limited caching)
-      async getUserShares(userId2) {
-        return storage.getUserShares(userId2);
-      }
-      async createUserShare(insertShare) {
-        return storage.createUserShare(insertShare);
-      }
-      async getUserRewards(userId2) {
-        return storage.getUserRewards(userId2);
-      }
-      async updateUserDiscount(userId2, discountPercentage) {
-        const user = await storage.updateUserDiscount(userId2, discountPercentage);
-        if (user) {
-          await this.invalidateUserCache(user);
-        }
-        return user;
-      }
-      async addRewardPoints(userId2, points, reason) {
-        const reward = await storage.addRewardPoints(userId2, points, reason);
-        await cacheService.delete(CACHE_NAMESPACES.USER, userId2);
-        return reward;
-      }
-      // Lead magnet operations (no caching needed for one-time operations)
-      async checkLeadMagnetCredits(email) {
-        return storage.checkLeadMagnetCredits(email);
-      }
-      async getLeadMagnetSignup(email) {
-        return storage.getLeadMagnetSignup(email);
-      }
-      async createLeadMagnetSignup(insertSignup) {
-        return storage.createLeadMagnetSignup(insertSignup);
-      }
-      async deleteLeadMagnetSignup(email) {
-        return storage.deleteLeadMagnetSignup(email);
-      }
-      async getLeadMagnetSignupCountByIP(ipAddress) {
-        return storage.getLeadMagnetSignupCountByIP(ipAddress);
-      }
-      // Referral system (no caching for simplicity)
-      async getUserReferral(userId2) {
-        return storage.getUserReferral(userId2);
-      }
-      async createUserReferral(insertReferral) {
-        return storage.createUserReferral(insertReferral);
-      }
-      // Cloud save operations (no caching needed)
-      async createCloudSave(insertCloudSave) {
-        return storage.createCloudSave(insertCloudSave);
-      }
-      async getCloudSave(id) {
-        return storage.getCloudSave(id);
-      }
-      async getCloudSavesByUser(userId2) {
-        return storage.getCloudSavesByUser(userId2);
-      }
-      async updateCloudSave(id, updates) {
-        return storage.updateCloudSave(id, updates);
-      }
-      async deleteCloudSave(id) {
-        return storage.deleteCloudSave(id);
-      }
-      // Cache management endpoints
-      async getCacheStats() {
-        return cacheService.getCacheInfo();
-      }
-      async clearUserCache(userId2) {
-        const user = await storage.getUser(userId2);
-        if (user) {
-          await this.invalidateUserCache(user);
-        }
-      }
-      async clearAllCache() {
-        await cacheService.deletePattern("*");
-      }
-    };
-    cachedStorage = new CachedStorage();
+    redis = null;
+    imageQueue = null;
+    rawQueue = null;
+    bulkQueue = null;
+    QUEUE_PRIORITIES = null;
+    JOB_TYPES = null;
   }
 });
 
@@ -3365,15 +1747,335 @@ var import_express6 = __toESM(require("express"), 1);
 var import_http = require("http");
 var import_crypto5 = require("crypto");
 var import_multer2 = __toESM(require("multer"), 1);
-var import_sharp5 = __toESM(require("sharp"), 1);
-var import_path5 = __toESM(require("path"), 1);
+var import_sharp4 = __toESM(require("sharp"), 1);
+var import_path4 = __toESM(require("path"), 1);
 var import_compression = __toESM(require("compression"), 1);
 var import_promises = __toESM(require("fs/promises"), 1);
-var import_fs5 = require("fs");
+var import_fs4 = require("fs");
 var import_archiver = __toESM(require("archiver"), 1);
 var import_child_process3 = require("child_process");
 var import_util3 = require("util");
-init_storage();
+
+// server/storage.ts
+init_schema();
+init_db();
+var import_drizzle_orm = require("drizzle-orm");
+var DatabaseStorage = class {
+  // In-memory storage for guest files (temporary)
+  guestFiles = /* @__PURE__ */ new Map();
+  // User operations
+  async getUser(id) {
+    const [user] = await db.select().from(users).where((0, import_drizzle_orm.eq)(users.id, id));
+    return user;
+  }
+  async getUserByEmail(email) {
+    const [user] = await db.select().from(users).where((0, import_drizzle_orm.eq)(users.email, email));
+    return user;
+  }
+  async createUser(insertUser) {
+    const [user] = await db.insert(users).values(insertUser).returning();
+    return user;
+  }
+  async updateUser(id, updates) {
+    const [user] = await db.update(users).set({ ...updates, updatedAt: /* @__PURE__ */ new Date() }).where((0, import_drizzle_orm.eq)(users.id, id)).returning();
+    return user;
+  }
+  async upsertUser(userData) {
+    const [user] = await db.insert(users).values(userData).onConflictDoUpdate({
+      target: users.id,
+      set: {
+        ...userData,
+        updatedAt: /* @__PURE__ */ new Date()
+      }
+    }).returning();
+    return user;
+  }
+  async createCompressionJob(insertJob) {
+    try {
+      const minimalJob = {
+        id: insertJob.id || `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        originalFilename: insertJob.originalFilename,
+        status: insertJob.status || "pending",
+        ...insertJob.userId && { userId: insertJob.userId },
+        ...insertJob.sessionId && { sessionId: insertJob.sessionId },
+        ...insertJob.outputFormat && { outputFormat: insertJob.outputFormat },
+        ...insertJob.originalPath && { originalPath: insertJob.originalPath }
+      };
+      const [job] = await db.insert(compressionJobs).values(minimalJob).returning();
+      return job;
+    } catch (error) {
+      console.error("Error creating compression job:", error);
+      const fallbackJob = {
+        id: insertJob.id || `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        originalFilename: insertJob.originalFilename,
+        status: insertJob.status || "pending",
+        userId: insertJob.userId || null,
+        sessionId: insertJob.sessionId || null,
+        outputFormat: insertJob.outputFormat || null,
+        originalPath: insertJob.originalPath || null,
+        compressedPath: null,
+        errorMessage: null,
+        fileSize: null,
+        compressedSize: null,
+        quality: null,
+        resizePercentage: null,
+        webOptimization: null,
+        metadata: null,
+        compressionSettings: null,
+        createdAt: /* @__PURE__ */ new Date(),
+        updatedAt: null,
+        compressionAlgorithm: null,
+        hasTransparency: false,
+        hasAnimation: false,
+        isProgressive: false,
+        width: null,
+        height: null,
+        inputFormat: null,
+        processingTime: null
+      };
+      return fallbackJob;
+    }
+  }
+  async getCompressionJob(id) {
+    const [job] = await db.select().from(compressionJobs).where((0, import_drizzle_orm.eq)(compressionJobs.id, id));
+    return job;
+  }
+  async getJobsByIds(ids) {
+    if (ids.length === 0) return [];
+    const jobs = await db.select().from(compressionJobs).where((0, import_drizzle_orm.inArray)(compressionJobs.id, ids));
+    return jobs;
+  }
+  async updateCompressionJob(id, updates) {
+    const [updatedJob] = await db.update(compressionJobs).set(updates).where((0, import_drizzle_orm.eq)(compressionJobs.id, id)).returning();
+    return updatedJob;
+  }
+  async getAllCompressionJobs(userId2) {
+    const jobs = await db.select().from(compressionJobs).where(userId2 ? (0, import_drizzle_orm.eq)(compressionJobs.userId, userId2) : void 0).orderBy((0, import_drizzle_orm.desc)(compressionJobs.createdAt));
+    return jobs;
+  }
+  async deleteCompressionJob(id) {
+    const result = await db.delete(compressionJobs).where((0, import_drizzle_orm.eq)(compressionJobs.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+  async getCompressionJobsBySession(sessionId) {
+    const jobs = await db.select().from(compressionJobs).where((0, import_drizzle_orm.eq)(compressionJobs.sessionId, sessionId)).orderBy((0, import_drizzle_orm.desc)(compressionJobs.createdAt));
+    return jobs;
+  }
+  async findExistingJob(userId2, sessionId, originalFilename, outputFormat) {
+    if (userId2) {
+      const [job2] = await db.select().from(compressionJobs).where(
+        (0, import_drizzle_orm.and)(
+          (0, import_drizzle_orm.eq)(compressionJobs.userId, userId2),
+          (0, import_drizzle_orm.eq)(compressionJobs.originalFilename, originalFilename),
+          (0, import_drizzle_orm.eq)(compressionJobs.outputFormat, outputFormat)
+        )
+      ).orderBy((0, import_drizzle_orm.desc)(compressionJobs.createdAt)).limit(1);
+      return job2;
+    }
+    const [job] = await db.select().from(compressionJobs).where(
+      (0, import_drizzle_orm.and)(
+        (0, import_drizzle_orm.eq)(compressionJobs.sessionId, sessionId),
+        (0, import_drizzle_orm.eq)(compressionJobs.originalFilename, originalFilename),
+        (0, import_drizzle_orm.eq)(compressionJobs.outputFormat, outputFormat)
+      )
+    ).orderBy((0, import_drizzle_orm.desc)(compressionJobs.createdAt)).limit(1);
+    return job;
+  }
+  async getUserByVerificationToken(token) {
+    const [user] = await db.select().from(users).where((0, import_drizzle_orm.eq)(users.emailVerificationToken, token));
+    return user;
+  }
+  async verifyUserEmail(id) {
+    const [user] = await db.update(users).set({
+      isEmailVerified: "true",
+      emailVerificationToken: null,
+      emailVerificationExpires: null,
+      updatedAt: /* @__PURE__ */ new Date()
+    }).where((0, import_drizzle_orm.eq)(users.id, id)).returning();
+    return user;
+  }
+  async togglePremiumStatus(userId2) {
+    const currentUser = await this.getUser(userId2);
+    if (!currentUser) return void 0;
+    const newPremiumStatus = !currentUser.isPremium;
+    const [user] = await db.update(users).set({
+      isPremium: newPremiumStatus,
+      updatedAt: /* @__PURE__ */ new Date()
+    }).where((0, import_drizzle_orm.eq)(users.id, userId2)).returning();
+    return user;
+  }
+  async updateUserStripeInfo(userId2, stripeCustomerId, stripeSubscriptionId) {
+    const updates = {
+      stripeCustomerId,
+      updatedAt: /* @__PURE__ */ new Date()
+    };
+    if (stripeSubscriptionId) {
+      updates.stripeSubscriptionId = stripeSubscriptionId;
+      updates.subscriptionStatus = "active";
+    }
+    const [user] = await db.update(users).set(updates).where((0, import_drizzle_orm.eq)(users.id, userId2)).returning();
+    return user;
+  }
+  async updateSubscriptionStatus(userId2, status, endDate) {
+    const [user] = await db.update(users).set({
+      subscriptionStatus: status,
+      subscriptionEndDate: endDate,
+      updatedAt: /* @__PURE__ */ new Date()
+    }).where((0, import_drizzle_orm.eq)(users.id, userId2)).returning();
+    return user;
+  }
+  async updateUserTier(userId2, tierData) {
+    const [user] = await db.update(users).set({
+      ...tierData,
+      updatedAt: /* @__PURE__ */ new Date()
+    }).where((0, import_drizzle_orm.eq)(users.id, userId2)).returning();
+    return user;
+  }
+  // Guest file operations
+  setGuestFile(id, buffer, originalName) {
+    this.guestFiles.set(id, { buffer, originalName });
+    setTimeout(() => {
+      this.guestFiles.delete(id);
+    }, 60 * 60 * 1e3);
+  }
+  getGuestFile(id) {
+    return this.guestFiles.get(id) || null;
+  }
+  // Social sharing and rewards operations
+  async createSocialShare(shareData) {
+    const [share] = await db.insert(socialShares).values(shareData).returning();
+    return share;
+  }
+  async getUserShares(userId2, limit = 10) {
+    const shares = await db.select().from(socialShares).where((0, import_drizzle_orm.eq)(socialShares.userId, userId2)).orderBy(socialShares.sharedAt).limit(limit);
+    return shares;
+  }
+  async getUserRewards(userId2) {
+    const [rewards] = await db.select().from(userRewards).where((0, import_drizzle_orm.eq)(userRewards.userId, userId2));
+    return rewards;
+  }
+  async addRewardPoints(userId2, points, source, relatedId) {
+    let [rewards] = await db.select().from(userRewards).where((0, import_drizzle_orm.eq)(userRewards.userId, userId2));
+    if (!rewards) {
+      [rewards] = await db.insert(userRewards).values({
+        userId: userId2,
+        totalPoints: points,
+        totalEarned: points,
+        sharePoints: source === "social_share" ? points : 0,
+        referralPoints: source === "referral" ? points : 0
+      }).returning();
+    } else {
+      const newTotalPoints = rewards.totalPoints + points;
+      const newTotalEarned = rewards.totalEarned + points;
+      const newSharePoints = rewards.sharePoints + (source === "social_share" ? points : 0);
+      const newReferralPoints = rewards.referralPoints + (source === "referral" ? points : 0);
+      [rewards] = await db.update(userRewards).set({
+        totalPoints: newTotalPoints,
+        totalEarned: newTotalEarned,
+        sharePoints: newSharePoints,
+        referralPoints: newReferralPoints,
+        updatedAt: /* @__PURE__ */ new Date()
+      }).where((0, import_drizzle_orm.eq)(userRewards.userId, userId2)).returning();
+    }
+    await db.insert(rewardTransactions).values({
+      userId: userId2,
+      type: "earned",
+      source,
+      points,
+      description: `Earned ${points} points from ${source.replace("_", " ")}`,
+      relatedId
+    });
+    return rewards;
+  }
+  async updateUserDiscount(userId2, discountPercent) {
+    const [rewards] = await db.update(userRewards).set({
+      currentDiscountPercent: discountPercent,
+      updatedAt: /* @__PURE__ */ new Date()
+    }).where((0, import_drizzle_orm.eq)(userRewards.userId, userId2)).returning();
+    return rewards;
+  }
+  async getUserReferral(userId2) {
+    const [referral] = await db.select().from(userReferrals).where((0, import_drizzle_orm.eq)(userReferrals.userId, userId2));
+    return referral;
+  }
+  async createUserReferral(userId2, referralCode) {
+    const [referral] = await db.insert(userReferrals).values({
+      userId: userId2,
+      referralCode
+    }).returning();
+    return referral;
+  }
+  // Lead magnet operations
+  async getLeadMagnetSignup(email) {
+    const [signup] = await db.select().from(leadMagnetSignups).where((0, import_drizzle_orm.eq)(leadMagnetSignups.email, email));
+    return signup;
+  }
+  async getLeadMagnetSignupCountByIP(ipAddress) {
+    const today = /* @__PURE__ */ new Date();
+    today.setHours(0, 0, 0, 0);
+    const signups = await db.select().from(leadMagnetSignups).where(
+      (0, import_drizzle_orm.and)(
+        (0, import_drizzle_orm.eq)(leadMagnetSignups.ipAddress, ipAddress),
+        (0, import_drizzle_orm.gte)(leadMagnetSignups.signedUpAt, today)
+      )
+    );
+    return signups.length;
+  }
+  async createLeadMagnetSignup(signupData) {
+    const [signup] = await db.insert(leadMagnetSignups).values(signupData).returning();
+    return signup;
+  }
+  async deleteLeadMagnetSignup(id) {
+    const result = await db.delete(leadMagnetSignups).where((0, import_drizzle_orm.eq)(leadMagnetSignups.id, id));
+    return result.rowCount > 0;
+  }
+  async checkLeadMagnetCredits(email) {
+    const signup = await this.getLeadMagnetSignup(email);
+    if (!signup || signup.status !== "active") {
+      return { hasCredits: false, creditsRemaining: 0, expiresAt: null };
+    }
+    if (signup.expiresAt && /* @__PURE__ */ new Date() > signup.expiresAt) {
+      return { hasCredits: false, creditsRemaining: 0, expiresAt: signup.expiresAt };
+    }
+    const creditsRemaining = signup.creditsGranted - signup.creditsUsed;
+    return {
+      hasCredits: creditsRemaining > 0,
+      creditsRemaining,
+      expiresAt: signup.expiresAt
+    };
+  }
+  async useLeadMagnetCredits(email, creditsToUse) {
+    const creditCheck = await this.checkLeadMagnetCredits(email);
+    if (!creditCheck.hasCredits || creditCheck.creditsRemaining < creditsToUse) {
+      return false;
+    }
+    const signup = await this.getLeadMagnetSignup(email);
+    if (!signup) return false;
+    const newCreditsUsed = signup.creditsUsed + creditsToUse;
+    await db.update(leadMagnetSignups).set({
+      creditsUsed: newCreditsUsed,
+      lastUsed: /* @__PURE__ */ new Date()
+    }).where((0, import_drizzle_orm.eq)(leadMagnetSignups.email, email));
+    return true;
+  }
+  // Bonus operations claim methods - using purchasedCredits field as tracker
+  async claimBonusOperations(userId2) {
+    const user = await this.getUser(userId2);
+    if (!user) {
+      return { success: false };
+    }
+    if (user.purchasedCredits > 0) {
+      return { success: false, alreadyClaimed: true };
+    }
+    await this.updateUser(userId2, { purchasedCredits: 100 });
+    return { success: true };
+  }
+  async hasClaimedBonusOperations(userId2) {
+    const user = await this.getUser(userId2);
+    return (user?.purchasedCredits || 0) > 0;
+  }
+};
+var storage = new DatabaseStorage();
 
 // server/emailService.ts
 var import_mail = require("@sendgrid/mail");
@@ -6412,12 +5114,132 @@ var CompressionEngine = class _CompressionEngine {
 };
 var compressionEngine_default = CompressionEngine;
 
+// server/fileCacheService.ts
+var FileCacheService = class {
+  cache = {};
+  CACHE_DURATION = 30 * 60 * 1e3;
+  // 30 minutes
+  MAX_CACHE_SIZE = 100;
+  // Maximum number of cached files
+  // Clean up expired files periodically
+  constructor() {
+    setInterval(() => this.cleanupExpiredFiles(), 5 * 60 * 1e3);
+  }
+  /**
+   * Store a file in cache and return cache ID
+   */
+  cacheFile(file, sessionId) {
+    const fileId = this.generateFileId(file, sessionId);
+    this.cache[fileId] = {
+      originalPath: file.path,
+      originalName: file.filename || file.originalname,
+      mimetype: file.mimetype,
+      size: file.size,
+      uploadedAt: /* @__PURE__ */ new Date(),
+      sessionId,
+      fileHash: this.generateFileHash(file)
+    };
+    if (Object.keys(this.cache).length > this.MAX_CACHE_SIZE) {
+      this.cleanupOldestFiles();
+    }
+    console.log(`\u{1F4C1} Cached file: ${file.originalname} as ${fileId}`);
+    return fileId;
+  }
+  /**
+   * Get cached file information
+   */
+  getCachedFile(fileId) {
+    const cached = this.cache[fileId];
+    if (!cached) return null;
+    if (Date.now() - cached.uploadedAt.getTime() > this.CACHE_DURATION) {
+      delete this.cache[fileId];
+      return null;
+    }
+    return cached;
+  }
+  /**
+   * Get all cached files for a session
+   */
+  getSessionFiles(sessionId) {
+    const sessionFiles = {};
+    for (const [fileId, cached] of Object.entries(this.cache)) {
+      if (cached.sessionId === sessionId && Date.now() - cached.uploadedAt.getTime() <= this.CACHE_DURATION) {
+        sessionFiles[fileId] = cached;
+      }
+    }
+    return sessionFiles;
+  }
+  /**
+   * Generate unique file ID based on content and session
+   */
+  generateFileId(file, sessionId) {
+    const timestamp2 = Date.now();
+    const hash = this.generateFileHash(file);
+    return `${sessionId}_${hash}_${timestamp2}`;
+  }
+  /**
+   * Generate file hash for deduplication
+   */
+  generateFileHash(file) {
+    return `${file.originalname}_${file.size}_${file.mimetype}`.replace(/[^a-zA-Z0-9]/g, "_");
+  }
+  /**
+   * Clean up expired files
+   */
+  cleanupExpiredFiles() {
+    const now = Date.now();
+    let removedCount = 0;
+    for (const [fileId, cached] of Object.entries(this.cache)) {
+      if (now - cached.uploadedAt.getTime() > this.CACHE_DURATION) {
+        delete this.cache[fileId];
+        removedCount++;
+      }
+    }
+    if (removedCount > 0) {
+      console.log(`\u{1F9F9} Cleaned up ${removedCount} expired cached files`);
+    }
+  }
+  /**
+   * Clean up oldest files when cache is full
+   */
+  cleanupOldestFiles() {
+    const entries = Object.entries(this.cache).sort(([, a], [, b]) => a.uploadedAt.getTime() - b.uploadedAt.getTime());
+    const removeCount = Math.floor(entries.length * 0.2);
+    for (let i = 0; i < removeCount; i++) {
+      delete this.cache[entries[i][0]];
+    }
+    console.log(`\u{1F9F9} Removed ${removeCount} oldest cached files to free space`);
+  }
+  /**
+   * Clear all cached files for a session
+   */
+  clearSession(sessionId) {
+    let removedCount = 0;
+    for (const [fileId, cached] of Object.entries(this.cache)) {
+      if (cached.sessionId === sessionId) {
+        delete this.cache[fileId];
+        removedCount++;
+      }
+    }
+    console.log(`\u{1F5D1}\uFE0F Cleared ${removedCount} cached files for session ${sessionId}`);
+  }
+  /**
+   * Get cache statistics
+   */
+  getStats() {
+    return {
+      totalFiles: Object.keys(this.cache).length,
+      totalSize: Object.values(this.cache).reduce((sum, file) => sum + file.size, 0),
+      oldestFile: Math.min(...Object.values(this.cache).map((f) => f.uploadedAt.getTime())),
+      newestFile: Math.max(...Object.values(this.cache).map((f) => f.uploadedAt.getTime()))
+    };
+  }
+};
+var fileCacheService = new FileCacheService();
+
 // server/routes.ts
 init_db();
 var import_drizzle_orm9 = require("drizzle-orm");
-
-// server/compressionUtils.ts
-init_storage();
 
 // server/qualityAssessment.ts
 var import_sharp2 = __toESM(require("sharp"), 1);
@@ -7140,7 +5962,6 @@ function getPlanPricing(plan, currency) {
 }
 
 // server/paymentRoutes.ts
-init_storage();
 var router = (0, import_express.Router)();
 router.post("/payment/routing", async (req, res) => {
   try {
@@ -8024,8 +6845,8 @@ var SINGLE_CONVERSION_LIMITS = {
   }
 };
 var planGatingMiddleware = async (req, res, next) => {
-  const path8 = req.path;
-  const pageConfig = PAGE_CONFIGS[path8];
+  const path7 = req.path;
+  const pageConfig = PAGE_CONFIGS[path7];
   if (!pageConfig) {
     return next();
   }
@@ -8087,8 +6908,8 @@ var planGatingMiddleware = async (req, res, next) => {
 };
 var conversionPageMiddleware = async (req, res, next) => {
   try {
-    const path8 = req.path;
-    if (PAGE_CONFIGS[path8]) {
+    const path7 = req.path;
+    if (PAGE_CONFIGS[path7]) {
       return next();
     }
     const pathMatch = req.path.match(/^\/(convert|compress)\/([a-z0-9]+-to-[a-z0-9]+)$/);
@@ -8252,10 +7073,10 @@ async function checkPaymentStatus(userId2, requiredAmount, planName) {
   }
 }
 var registerConversionRoutes = (app2) => {
-  Object.keys(PAGE_CONFIGS).forEach((path8) => {
-    console.log(`[ConversionRoutes] Registering universal format page: ${path8}`);
+  Object.keys(PAGE_CONFIGS).forEach((path7) => {
+    console.log(`[ConversionRoutes] Registering universal format page: ${path7}`);
     app2.get(
-      path8,
+      path7,
       planGatingMiddleware,
       conversionPageMiddleware,
       (req, res, next) => {
@@ -8263,7 +7084,7 @@ var registerConversionRoutes = (app2) => {
       }
     );
     app2.post(
-      `/api${path8}`,
+      `/api${path7}`,
       planGatingMiddleware,
       conversionPageMiddleware,
       conversionValidationMiddleware,
@@ -8278,23 +7099,23 @@ var registerConversionRoutes = (app2) => {
   });
   Object.keys(CONVERSION_MATRIX).forEach((route) => {
     const config = CONVERSION_MATRIX[route];
-    const path8 = `/${config.type}/${route}`;
-    console.log(`[ConversionRoutes] Registering single conversion page: ${path8}`);
+    const path7 = `/${config.type}/${route}`;
+    console.log(`[ConversionRoutes] Registering single conversion page: ${path7}`);
     app2.get(
-      path8,
+      path7,
       conversionPageMiddleware,
       (req, res, next) => {
         next();
       }
     );
     app2.post(
-      `/api${path8}`,
+      `/api${path7}`,
       conversionPageMiddleware,
       conversionValidationMiddleware,
       (req, res) => {
         res.json({
           message: "Processing conversion",
-          route: path8,
+          route: path7,
           autoOutput: req.autoOutputFormat
         });
       }
@@ -8309,7 +7130,7 @@ init_schema();
 var subscriptionTierAccessControl = async (req, res, next) => {
   try {
     const session4 = req.session;
-    const path8 = req.path;
+    const path7 = req.path;
     if (!session4?.userId) {
       return next();
     }
@@ -8332,7 +7153,7 @@ var subscriptionTierAccessControl = async (req, res, next) => {
     };
     if (subscriptionTier === "test_premium" && subscriptionStatus === "active") {
       const restrictions = tierRestrictions.test_premium;
-      if (restrictions.blockedRoutes.some((route) => path8.startsWith(route))) {
+      if (restrictions.blockedRoutes.some((route) => path7.startsWith(route))) {
         return res.status(403).json({
           error: "Access denied",
           message: "Your Test Premium plan does not include access to this feature",
@@ -8341,13 +7162,13 @@ var subscriptionTierAccessControl = async (req, res, next) => {
           upgradeRequired: true
         });
       }
-      if (path8 === "/free" || path8 === "/compress-free") {
+      if (path7 === "/free" || path7 === "/compress-free") {
         return res.redirect(302, restrictions.redirectRoute);
       }
     }
     if (subscriptionTier === "free" || !subscriptionTier) {
       const restrictions = tierRestrictions.free;
-      if (restrictions.blockedRoutes.some((route) => path8.startsWith(route))) {
+      if (restrictions.blockedRoutes.some((route) => path7.startsWith(route))) {
         return res.status(403).json({
           error: "Access denied",
           message: "Please upgrade your subscription to access this feature",
@@ -8366,8 +7187,8 @@ var subscriptionTierAccessControl = async (req, res, next) => {
 var tierBasedRouting = async (req, res, next) => {
   try {
     const session4 = req.session;
-    const path8 = req.path;
-    if (!session4?.userId || !["/", "/dashboard", "/home"].includes(path8)) {
+    const path7 = req.path;
+    if (!session4?.userId || !["/", "/dashboard", "/home"].includes(path7)) {
       return next();
     }
     const [user] = await db.select({ subscriptionTier: users.subscriptionTier, subscriptionStatus: users.subscriptionStatus }).from(users).where((0, import_drizzle_orm4.eq)(users.id, session4.userId)).limit(1);
@@ -8384,7 +7205,7 @@ var tierBasedRouting = async (req, res, next) => {
     if (subscriptionTier === "enterprise" && subscriptionStatus === "active") {
       return res.redirect(302, "/enterprise");
     }
-    if (path8 === "/" || path8 === "/dashboard") {
+    if (path7 === "/" || path7 === "/dashboard") {
       return res.redirect(302, "/free");
     }
     next();
@@ -8396,8 +7217,8 @@ var tierBasedRouting = async (req, res, next) => {
 var apiTierAccessControl = async (req, res, next) => {
   try {
     const session4 = req.session;
-    const path8 = req.path;
-    if (!path8.startsWith("/api/") || !session4?.userId) {
+    const path7 = req.path;
+    if (!path7.startsWith("/api/") || !session4?.userId) {
       return next();
     }
     const [user] = await db.select({ subscriptionTier: users.subscriptionTier, subscriptionStatus: users.subscriptionStatus }).from(users).where((0, import_drizzle_orm4.eq)(users.id, session4.userId)).limit(1);
@@ -8417,7 +7238,7 @@ var apiTierAccessControl = async (req, res, next) => {
     };
     if (subscriptionTier === "test_premium" && subscriptionStatus === "active") {
       const rules = apiAccessRules.test_premium;
-      if (rules.blockedEndpoints.some((endpoint) => path8.startsWith(endpoint))) {
+      if (rules.blockedEndpoints.some((endpoint) => path7.startsWith(endpoint))) {
         return res.status(403).json({
           error: "API access denied",
           message: "Your Test Premium plan does not include access to this API endpoint",
@@ -8428,7 +7249,7 @@ var apiTierAccessControl = async (req, res, next) => {
     }
     if ((subscriptionTier === "free" || !subscriptionTier) && subscriptionStatus !== "active") {
       const rules = apiAccessRules.free;
-      if (rules.blockedEndpoints.some((endpoint) => path8.startsWith(endpoint))) {
+      if (rules.blockedEndpoints.some((endpoint) => path7.startsWith(endpoint))) {
         return res.status(403).json({
           error: "API access denied",
           message: "Please upgrade your subscription to access this API endpoint",
@@ -8451,7 +7272,6 @@ var import_passport2 = __toESM(require("passport"), 1);
 var import_express_session = __toESM(require("express-session"), 1);
 var import_memoizee = __toESM(require("memoizee"), 1);
 var import_connect_pg_simple = __toESM(require("connect-pg-simple"), 1);
-init_storage();
 if (!process.env.REPLIT_DOMAINS) {
   console.warn("REPLIT_DOMAINS not provided - Replit authentication will be disabled");
 }
@@ -8757,7 +7577,6 @@ async function loadPaypalDefault(req, res) {
 var import_bcryptjs2 = __toESM(require("bcryptjs"), 1);
 var import_express_session2 = __toESM(require("express-session"), 1);
 var import_connect_pg_simple2 = __toESM(require("connect-pg-simple"), 1);
-init_storage();
 var isAuthenticated2 = async (req, res, next) => {
   const session4 = req.session;
   if (!session4.userId) {
@@ -8787,7 +7606,6 @@ async function verifyPassword(password, hashedPassword) {
 
 // server/routes.ts
 init_schema();
-init_redis();
 init_schema();
 
 // server/unifiedPlanConfig.ts
@@ -11087,7 +9905,7 @@ var getFileExtension = (format) => {
   return extensionMap[normalized] || normalized;
 };
 function generateBrandedFilename(originalFilename, inputFormat, outputFormat, operation = "compress", includeTimestamp = false) {
-  const nameWithoutExt = import_path5.default.parse(originalFilename).name;
+  const nameWithoutExt = import_path4.default.parse(originalFilename).name;
   const formatMap = {
     "jpeg": "jpg",
     "jpg": "jpg",
@@ -11145,7 +9963,7 @@ PROCESSED FILES:
 ----------------------------------------
 `;
   files.forEach((file, index) => {
-    const ext = import_path5.default.extname(file.name).slice(1).toLowerCase();
+    const ext = import_path4.default.extname(file.name).slice(1).toLowerCase();
     const format = normalizeFormat(ext);
     content += `
 ${index + 1}. File: ${file.name}
@@ -11191,7 +10009,7 @@ async function processCompressionJob(jobId, originalPath, originalFilename, sett
     }
     const normalizedFormat = normalizeFormat(rawOutputFormat);
     const outputExtension = getFileExtension(normalizedFormat);
-    const outputPath = import_path5.default.join("converted", `${jobId}.${outputExtension}`);
+    const outputPath = import_path4.default.join("converted", `${jobId}.${outputExtension}`);
     const quality = settings.customQuality || 75;
     const outputFormat = normalizedFormat;
     console.log(`\u{1F5BC}\uFE0F Processing job ${jobId}: rawFormat=${rawOutputFormat}, normalizedFormat=${normalizedFormat}, outputExtension=${outputExtension}, quality=${quality}, originalFile=${originalFilename}`);
@@ -11215,9 +10033,9 @@ async function processCompressionJob(jobId, originalPath, originalFilename, sett
     const compressionRatio = originalStats.size > 0 ? Math.round((originalStats.size - result.finalSize) / originalStats.size * 100) : 0;
     let thumbnailPath;
     try {
-      const previewsDir = import_path5.default.join(process.cwd(), "previews");
+      const previewsDir = import_path4.default.join(process.cwd(), "previews");
       await import_promises.default.mkdir(previewsDir, { recursive: true });
-      thumbnailPath = import_path5.default.join(previewsDir, jobId + "_thumb.jpg");
+      thumbnailPath = import_path4.default.join(previewsDir, jobId + "_thumb.jpg");
       const thumbnailCommand = `convert "${outputPath}" -resize "256x256>" -quality 60 -strip "${thumbnailPath}"`;
       console.log(`\u{1F5BC}\uFE0F Generating thumbnail for ${outputFormat}: ${thumbnailCommand}`);
       await execAsync3(thumbnailCommand);
@@ -11437,84 +10255,17 @@ async function registerRoutes(app2) {
     }
   });
   app2.get("/health/redis", async (req, res) => {
-    try {
-      const { getQueueServiceStatus: getQueueServiceStatus2 } = await Promise.resolve().then(() => (init_queueService(), queueService_exports));
-      const status = await getQueueServiceStatus2();
-      if (status.redis && Object.values(status.queues).every(Boolean)) {
-        res.json({
-          status: "healthy",
-          redis: status.redis,
-          queues: status.queues,
-          ...status.stats && { stats: status.stats }
-        });
-      } else {
-        res.status(503).json({
-          status: "unhealthy",
-          redis: status.redis,
-          queues: status.queues
-        });
-      }
-    } catch (error) {
-      res.status(503).json({
-        status: "error",
-        message: "Queue service not available",
-        redis: false,
-        queues: { imageQueue: false, rawQueue: false, bulkQueue: false }
-      });
-    }
-  });
-  app2.get("/health/cache", async (req, res) => {
-    try {
-      const { cachedStorage: cachedStorage2 } = await Promise.resolve().then(() => (init_cachedStorage(), cachedStorage_exports));
-      const cacheStats = await cachedStorage2.getCacheStats();
-      res.json({
-        status: "healthy",
-        cache: cacheStats
-      });
-    } catch (error) {
-      res.status(503).json({
-        status: "error",
-        message: "Cache service not available",
-        error: error.message
-      });
-    }
-  });
-  app2.delete("/api/cache/user/:userId", async (req, res) => {
-    try {
-      const { userId: userId2 } = req.params;
-      const { cachedStorage: cachedStorage2 } = await Promise.resolve().then(() => (init_cachedStorage(), cachedStorage_exports));
-      await cachedStorage2.clearUserCache(userId2);
-      res.json({
-        success: true,
-        message: `Cache cleared for user ${userId2}`
-      });
-    } catch (error) {
-      res.status(500).json({
-        error: "Failed to clear user cache",
-        message: error.message
-      });
-    }
-  });
-  app2.delete("/api/cache/all", async (req, res) => {
-    try {
-      const { cachedStorage: cachedStorage2 } = await Promise.resolve().then(() => (init_cachedStorage(), cachedStorage_exports));
-      await cachedStorage2.clearAllCache();
-      res.json({
-        success: true,
-        message: "All cache cleared"
-      });
-    } catch (error) {
-      res.status(500).json({
-        error: "Failed to clear all cache",
-        message: error.message
-      });
-    }
+    res.json({
+      status: "healthy",
+      redis: "eliminated",
+      message: "Redis has been eliminated for improved performance"
+    });
   });
   app2.get("/api/job/:jobId/status", async (req, res) => {
     try {
       const { jobId } = req.params;
-      const { getJobStatus: getJobStatus3 } = await Promise.resolve().then(() => (init_queueService(), queueService_exports));
-      const jobStatus = await getJobStatus3(jobId);
+      const { getJobStatus: getJobStatus2 } = await Promise.resolve().then(() => (init_queueService(), queueService_exports));
+      const jobStatus = await getJobStatus2(jobId);
       if (!jobStatus) {
         return res.status(404).json({
           error: "Job not found",
@@ -11536,13 +10287,13 @@ async function registerRoutes(app2) {
   app2.post("/api/queue/add", async (req, res) => {
     try {
       const { jobType, jobData, options = {} } = req.body;
-      const { addJobToQueue: addJobToQueue3 } = await Promise.resolve().then(() => (init_queueService(), queueService_exports));
+      const { addJobToQueue: addJobToQueue2 } = await Promise.resolve().then(() => (init_queueService(), queueService_exports));
       if (!jobType || !jobData) {
         return res.status(400).json({
           error: "Missing required fields: jobType, jobData"
         });
       }
-      const job = await addJobToQueue3(jobType, jobData, "standard", options);
+      const job = await addJobToQueue2(jobType, jobData, "standard", options);
       res.json({
         success: true,
         jobId: job.id,
@@ -11567,11 +10318,11 @@ async function registerRoutes(app2) {
       if (!id.match(/^[a-zA-Z0-9_-]+$/)) {
         return res.status(400).json({ error: "Invalid preview ID" });
       }
-      const previewPath = import_path5.default.join(process.cwd(), "previews", id + "_thumb.jpg");
+      const previewPath = import_path4.default.join(process.cwd(), "previews", id + "_thumb.jpg");
       import_promises.default.access(previewPath).then(() => {
         res.setHeader("Content-Type", "image/jpeg");
         res.setHeader("Cache-Control", "public, max-age=86400");
-        const fileStream = (0, import_fs5.createReadStream)(previewPath);
+        const fileStream = (0, import_fs4.createReadStream)(previewPath);
         fileStream.pipe(res);
       }).catch(() => {
         res.status(404).json({ error: "Preview not found" });
@@ -11582,7 +10333,7 @@ async function registerRoutes(app2) {
     }
   });
   app2.get("/api/download/wordpress-plugin", (req, res, next) => {
-    const pluginPath = import_path5.default.join(process.cwd(), "micro-jpeg-api-wordpress-plugin.zip");
+    const pluginPath = import_path4.default.join(process.cwd(), "micro-jpeg-api-wordpress-plugin.zip");
     console.log("WordPress plugin download requested, serving from:", pluginPath);
     res.sendFile(pluginPath, (err) => {
       if (err) {
@@ -11626,11 +10377,11 @@ async function registerRoutes(app2) {
             const correctExt = getExtension(job.outputFormat);
             const directories = ["converted", "compressed"];
             for (const dir of directories) {
-              const filePath = import_path5.default.join(process.cwd(), dir, `${id}.${correctExt}`);
+              const filePath = import_path4.default.join(process.cwd(), dir, `${id}.${correctExt}`);
               try {
                 await import_promises.default.access(filePath);
                 const contentType = getMimeTypeForDownload(correctExt);
-                const inputFormat = job.inputFormat || import_path5.default.extname(job.originalFilename || "").slice(1) || "jpg";
+                const inputFormat = job.inputFormat || import_path4.default.extname(job.originalFilename || "").slice(1) || "jpg";
                 const outputFormat = job.outputFormat;
                 const operation = inputFormat.toLowerCase() === outputFormat.toLowerCase() ? "compress" : "convert";
                 const brandedFilename = generateBrandedFilename(
@@ -11645,7 +10396,7 @@ async function registerRoutes(app2) {
                 res.setHeader("Content-Disposition", `attachment; filename="${brandedFilename}"`);
                 res.setHeader("Cache-Control", "public, max-age=3600");
                 console.log(`\u2705 Serving correct format: ${filePath} (${contentType})`);
-                const fileStream = (0, import_fs5.createReadStream)(filePath);
+                const fileStream = (0, import_fs4.createReadStream)(filePath);
                 return fileStream.pipe(res);
               } catch (err) {
                 continue;
@@ -11657,7 +10408,7 @@ async function registerRoutes(app2) {
         }
         const possibleExtensions = ["tiff", "png", "webp", "avif", "svg", "jpg", "jpeg"];
         for (const ext of possibleExtensions) {
-          const convertedPath = import_path5.default.join(process.cwd(), "converted", `${id}.${ext}`);
+          const convertedPath = import_path4.default.join(process.cwd(), "converted", `${id}.${ext}`);
           try {
             await import_promises.default.access(convertedPath);
             const contentType = getMimeTypeForDownload(ext);
@@ -11675,14 +10426,14 @@ async function registerRoutes(app2) {
             res.setHeader("Content-Disposition", `attachment; filename="${brandedFilename}"`);
             res.setHeader("Cache-Control", "public, max-age=3600");
             console.log(`\u{1F4C1} Serving from converted: ${convertedPath} (${contentType})`);
-            const fileStream = (0, import_fs5.createReadStream)(convertedPath);
+            const fileStream = (0, import_fs4.createReadStream)(convertedPath);
             return fileStream.pipe(res);
           } catch (err) {
             continue;
           }
         }
         for (const ext of possibleExtensions) {
-          const compressedPath = import_path5.default.join(process.cwd(), "compressed", `${id}.${ext}`);
+          const compressedPath = import_path4.default.join(process.cwd(), "compressed", `${id}.${ext}`);
           try {
             await import_promises.default.access(compressedPath);
             const contentType = getMimeTypeForDownload(ext);
@@ -11700,7 +10451,7 @@ async function registerRoutes(app2) {
             res.setHeader("Content-Disposition", `attachment; filename="${brandedFilename}"`);
             res.setHeader("Cache-Control", "public, max-age=3600");
             console.log(`\u{1F4C1} Serving from compressed: ${compressedPath} (${contentType})`);
-            const fileStream = (0, import_fs5.createReadStream)(compressedPath);
+            const fileStream = (0, import_fs4.createReadStream)(compressedPath);
             return fileStream.pipe(res);
           } catch (err) {
             continue;
@@ -12027,32 +10778,46 @@ async function registerRoutes(app2) {
       if (!user) {
         settings.compressionAlgorithm = "standard";
       }
-      const results = [];
-      const jobs = [];
       console.log("Compression settings received:", settings);
       console.log("Files to process:", files.map((f) => ({ name: f.originalname, ext: f.originalname.split(".").pop() })));
       console.log("=== PROCESSING FILES WITH SHARP + IMAGEMAGICK ===");
+      const cachedFileIds = [];
+      for (const file of files) {
+        const cacheId = fileCacheService.cacheFile(file, req.sessionID);
+        cachedFileIds.push(cacheId);
+        console.log(`\u{1F4C1} Cached ${file.originalname} as ${cacheId}`);
+      }
+      const jobPromises = [];
+      const jobMetadata = [];
       for (const file of files) {
         const fileExtension = file.originalname.split(".").pop()?.toLowerCase() || "jpg";
         console.log(`File: ${file.originalname}, extension: ${fileExtension}, settings.outputFormat: ${settings.outputFormat}`);
         let outputFormats = Array.isArray(settings.outputFormat) ? settings.outputFormat : settings.outputFormat === "keep-original" ? [fileExtension] : [settings.outputFormat];
         console.log(`Determined outputFormats: [${outputFormats.join(", ")}]`);
-        console.log(`File: ${file.originalname}, outputFormats array: [${outputFormats.join(", ")}], settings.outputFormat: ${settings.outputFormat}`);
         for (const outputFormat of outputFormats) {
-          console.log(`Creating compression job for user ${user?.id}, file: ${file.originalname}, format: ${outputFormat}`);
-          const job = await storage.createCompressionJob({
+          console.log(`Preparing compression job for user ${user?.id}, file: ${file.originalname}, format: ${outputFormat}`);
+          const jobPromise = storage.createCompressionJob({
             userId: user?.id || null,
             sessionId: req.sessionID,
-            // For guest users
             originalFilename: file.originalname,
             status: "pending",
             outputFormat,
             originalPath: file.path
           });
-          console.log(`Created job ${job.id} for user ${user?.id || "guest"}`);
-          jobs.push({ job, file, outputFormat });
+          jobPromises.push(jobPromise);
+          jobMetadata.push({ file, outputFormat });
         }
       }
+      console.log(`\u{1F680} Creating ${jobPromises.length} jobs in batch...`);
+      const createdJobs = await Promise.all(jobPromises);
+      const jobs = createdJobs.map((job, index) => ({
+        job,
+        file: jobMetadata[index].file,
+        outputFormat: jobMetadata[index].outputFormat
+      }));
+      console.log(`\u2705 Created ${jobs.length} jobs in batch`);
+      const updatePromises = [];
+      const results = [];
       for (const { job, file, outputFormat } of jobs) {
         try {
           const getFileExtension2 = (format) => {
@@ -12087,7 +10852,7 @@ async function registerRoutes(app2) {
             }
           };
           const fileExtension = getFileExtension2(outputFormat);
-          const outputPath = import_path5.default.join("compressed", `${job.id}.${fileExtension}`);
+          const outputPath = import_path4.default.join("compressed", `${job.id}.${fileExtension}`);
           console.log(`Processing ${file.originalname} -> ${outputFormat.toUpperCase()} (parallel)`);
           const inputFormat = getFileFormat(file.originalname);
           const fileExtName = file.originalname.split(".").pop()?.toLowerCase() || "";
@@ -12121,7 +10886,7 @@ async function registerRoutes(app2) {
               throw error;
             }
           } else {
-            let sharpOperation = (0, import_sharp5.default)(file.path);
+            let sharpOperation = (0, import_sharp4.default)(file.path);
             if (settings.resizeOption === "resize-percentage" && settings.resizePercentage && settings.resizePercentage < 100) {
               const metadata = await sharpOperation.metadata();
               console.log(`Original dimensions: ${metadata.width}x${metadata.height}, Resize to: ${settings.resizePercentage}%`);
@@ -12164,18 +10929,14 @@ async function registerRoutes(app2) {
           const originalStats = await import_promises.default.stat(file.path);
           const compressedStats = await import_promises.default.stat(outputPath);
           const compressionRatio = Math.round((1 - compressedStats.size / originalStats.size) * 100);
-          try {
-            await storage.updateCompressionJob(job.id, {
-              status: "completed",
-              compressedPath: outputPath,
-              compressedSize: compressedStats.size,
-              compressionRatio,
-              outputFormat
-              // Store the actual output format
-            });
-          } catch (dbError) {
-            console.error(`Database update failed for job ${job.id}:`, dbError);
-          }
+          const jobUpdate = storage.updateCompressionJob(job.id, {
+            status: "completed",
+            compressedPath: outputPath,
+            compressedSize: compressedStats.size,
+            compressionRatio,
+            outputFormat
+          });
+          updatePromises.push(jobUpdate);
           const resultData = {
             id: job.id,
             // Use actual job ID
@@ -12187,7 +10948,7 @@ async function registerRoutes(app2) {
             originalFormat: file.mimetype.split("/")[1].toUpperCase(),
             outputFormat: outputFormat.toUpperCase(),
             wasConverted: settings.outputFormat !== "keep-original",
-            compressedFileName: import_path5.default.basename(outputPath),
+            compressedFileName: import_path4.default.basename(outputPath),
             settings: {
               quality: settings.quality,
               outputFormat: settings.outputFormat,
@@ -12205,20 +10966,24 @@ async function registerRoutes(app2) {
           results.push(resultData);
         } catch (jobError) {
           console.error(`Error compressing ${file.originalname} to ${outputFormat}:`, jobError);
-          try {
-            await storage.updateCompressionJob(job.id, {
-              status: "failed",
-              errorMessage: jobError instanceof Error ? jobError.message : "Compression failed"
-            });
-          } catch (dbError) {
-            console.error(`Database update failed for failed job ${job.id}:`, dbError);
-          }
+          const errorUpdate = storage.updateCompressionJob(job.id, {
+            status: "failed",
+            errorMessage: jobError instanceof Error ? jobError.message : "Compression failed"
+          });
+          updatePromises.push(errorUpdate);
           results.push({
             id: job.id,
             originalName: file.originalname,
             error: "Compression failed"
           });
         }
+      }
+      console.log(`\u{1F680} Executing ${updatePromises.length} database updates in batch...`);
+      try {
+        await Promise.allSettled(updatePromises);
+        console.log(`\u2705 Completed ${updatePromises.length} database updates in batch`);
+      } catch (batchError) {
+        console.error("Batch database update error:", batchError);
       }
       const processedFiles = /* @__PURE__ */ new Set();
       for (const { file } of jobs) {
@@ -12254,11 +11019,158 @@ async function registerRoutes(app2) {
       res.json({
         results,
         batchId,
-        batchDownloadUrl: `/api/download-zip/${batchId}`
+        batchDownloadUrl: `/api/download-zip/${batchId}`,
+        cachedFileIds
+        // ✅ OPTIMIZATION: Include cached file IDs for future conversions
       });
     } catch (error) {
       console.error("Compression error:", error);
       res.status(500).json({ error: "Compression failed" });
+    }
+  });
+  function getOptimalEngine(inputFormat, outputFormat) {
+    const rawFormats = ["dng", "cr2", "nef", "arw", "orf", "raf", "rw2"];
+    const sharpFormats = ["jpg", "jpeg", "png", "webp", "avif"];
+    if (rawFormats.includes(inputFormat.toLowerCase())) {
+      return "dcraw";
+    }
+    if (inputFormat === "svg" || outputFormat === "tiff" || inputFormat === "tiff") {
+      return "imagemagick";
+    }
+    if (sharpFormats.includes(inputFormat.toLowerCase()) && sharpFormats.includes(outputFormat.toLowerCase())) {
+      return "sharp";
+    }
+    return "imagemagick";
+  }
+  async function processWithSharp(inputPath, outputPath, outputFormat, settings) {
+    let sharpOperation = (0, import_sharp4.default)(inputPath);
+    if (settings?.resizeOption === "resize-percentage" && settings?.resizePercentage && settings.resizePercentage < 100) {
+      const metadata = await sharpOperation.metadata();
+      if (metadata.width && metadata.height) {
+        const targetWidth = Math.round(metadata.width * (settings.resizePercentage / 100));
+        const targetHeight = Math.round(metadata.height * (settings.resizePercentage / 100));
+        sharpOperation = sharpOperation.resize(targetWidth, targetHeight, {
+          fit: "inside",
+          withoutEnlargement: true
+        });
+      }
+    }
+    const formatOptions = {
+      quality: settings?.quality || 80,
+      ...outputFormat === "png" && { compressionLevel: 8 },
+      ...outputFormat === "webp" && { effort: 4 },
+      // Fast WebP
+      ...outputFormat === "avif" && { effort: 2 }
+      // Fast AVIF
+    };
+    await sharpOperation.toFormat(outputFormat, formatOptions).toFile(outputPath);
+    return { success: true, engine: "sharp" };
+  }
+  async function processWithImageMagick(inputPath, outputPath, outputFormat, settings) {
+    const execAsync4 = (0, import_util3.promisify)(import_child_process3.exec);
+    const quality = settings?.quality || 80;
+    let command = `magick "${inputPath}"`;
+    if (settings?.resizeOption === "resize-percentage" && settings?.resizePercentage && settings.resizePercentage < 100) {
+      command += ` -resize ${settings.resizePercentage}%`;
+    }
+    command += ` -quality ${quality}`;
+    if (outputFormat === "tiff") {
+      command += ` -compress lzw`;
+    }
+    command += ` "${outputPath}"`;
+    await execAsync4(command);
+    return { success: true, engine: "imagemagick" };
+  }
+  app2.post("/api/convert-cached", requireScopeFromAuth, async (req, res) => {
+    try {
+      const { cachedFileIds, outputFormat, settings } = req.body;
+      if (!cachedFileIds || !Array.isArray(cachedFileIds) || cachedFileIds.length === 0) {
+        return res.status(400).json({ error: "No cached file IDs provided" });
+      }
+      if (!outputFormat) {
+        return res.status(400).json({ error: "Output format not specified" });
+      }
+      console.log(`\u{1F504} Converting ${cachedFileIds.length} cached files to ${outputFormat}`);
+      const cachedFiles = [];
+      for (const fileId of cachedFileIds) {
+        const cached = fileCacheService.getCachedFile(fileId);
+        if (!cached) {
+          return res.status(404).json({
+            error: `Cached file not found: ${fileId}`
+          });
+        }
+        cachedFiles.push({ fileId, cached });
+      }
+      const sessionId = req.sessionID;
+      const hasAccess = cachedFiles.every(({ cached }) => cached.sessionId === sessionId);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Access denied to cached files" });
+      }
+      const results = [];
+      const jobs = [];
+      for (const { fileId, cached } of cachedFiles) {
+        const job = await storage.createCompressionJob({
+          userId: req.user?.id || null,
+          sessionId,
+          originalFilename: cached.originalName,
+          status: "pending",
+          outputFormat,
+          originalPath: cached.originalPath
+        });
+        jobs.push({ job, cached, fileId });
+      }
+      for (const { job, cached } of jobs) {
+        try {
+          const inputFormat = cached.originalName.split(".").pop()?.toLowerCase() || "";
+          const engine = getOptimalEngine(inputFormat, outputFormat);
+          console.log(`\u{1F527} Converting ${cached.originalName} using ${engine} engine: ${inputFormat} \u2192 ${outputFormat}`);
+          const outputPath = import_path4.default.join("compressed", `${job.id}.${outputFormat}`);
+          let result;
+          if (engine === "sharp") {
+            result = await processWithSharp(cached.originalPath, outputPath, outputFormat, settings);
+          } else if (engine === "imagemagick") {
+            result = await processWithImageMagick(cached.originalPath, outputPath, outputFormat, settings);
+          } else {
+            result = await processSpecialFormatConversion(cached.originalPath, outputPath, inputFormat, outputFormat, settings);
+          }
+          const originalStats = await import_promises.default.stat(cached.originalPath);
+          const compressedStats = await import_promises.default.stat(outputPath);
+          const compressionRatio = Math.round((1 - compressedStats.size / originalStats.size) * 100);
+          await storage.updateCompressionJob(job.id, {
+            status: "completed",
+            compressedPath: outputPath,
+            compressedSize: compressedStats.size,
+            compressionRatio,
+            outputFormat
+          });
+          results.push({
+            id: job.id,
+            originalName: cached.originalName,
+            originalSize: originalStats.size,
+            compressedSize: compressedStats.size,
+            compressionRatio,
+            downloadUrl: `/api/download/${job.id}`,
+            originalFormat: cached.mimetype.split("/")[1]?.toUpperCase() || "UNKNOWN",
+            outputFormat: outputFormat.toUpperCase(),
+            wasConverted: true,
+            engine
+          });
+        } catch (error) {
+          console.error(`Conversion failed for ${cached.originalName}:`, error);
+          await storage.updateCompressionJob(job.id, {
+            status: "failed",
+            error: error.message
+          });
+          results.push({
+            error: `Failed to convert ${cached.originalName}: ${error.message}`,
+            originalName: cached.originalName
+          });
+        }
+      }
+      res.json({ results });
+    } catch (error) {
+      console.error("Cached conversion error:", error);
+      res.status(500).json({ error: "Cached conversion failed" });
     }
   });
   app2.get("/api/download/compressed/:jobId", async (req, res) => {
@@ -12271,7 +11183,7 @@ async function registerRoutes(app2) {
       const originalName = job.originalFilename;
       const outputFormat = job.outputFormat || "jpeg";
       const extension = outputFormat === "jpeg" ? ".jpg" : `.${outputFormat}`;
-      const baseName = import_path5.default.parse(originalName).name;
+      const baseName = import_path4.default.parse(originalName).name;
       const downloadName = `${baseName}_compressed${extension}`;
       if (job.cdnUrl) {
         console.log(`\u{1F310} Redirecting download to CDN: ${job.cdnUrl}`);
@@ -12339,7 +11251,7 @@ async function registerRoutes(app2) {
       res.setHeader("Content-Type", contentType);
       res.setHeader("Cache-Control", "public, max-age=3600");
       console.log(`\u{1F4C1} Serving local file: ${job.compressedPath}`);
-      res.sendFile(import_path5.default.resolve(job.compressedPath));
+      res.sendFile(import_path4.default.resolve(job.compressedPath));
     } catch (error) {
       console.error("Image serving error:", error);
       res.status(404).json({ error: "Image not found" });
@@ -12362,7 +11274,7 @@ async function registerRoutes(app2) {
       const validFiles = [];
       for (const filename of batchInfo.files) {
         try {
-          let filePath = import_path5.default.join(compressedDir, filename);
+          let filePath = import_path4.default.join(compressedDir, filename);
           try {
             await import_promises.default.access(filePath);
             validFiles.push({
@@ -12371,7 +11283,7 @@ async function registerRoutes(app2) {
             });
             continue;
           } catch (err) {
-            filePath = import_path5.default.join("converted", filename);
+            filePath = import_path4.default.join("converted", filename);
             await import_promises.default.access(filePath);
             validFiles.push({
               name: filename,
@@ -12403,12 +11315,12 @@ async function registerRoutes(app2) {
       for (const file of validFiles) {
         try {
           await import_promises.default.access(file.path);
-          const fileExt = import_path5.default.extname(file.name).slice(1).toLowerCase();
+          const fileExt = import_path4.default.extname(file.name).slice(1).toLowerCase();
           const format = normalizeFormat(fileExt);
           const cleanName = file.name.replace(/^compressed_\d+_/, "");
-          const baseNameWithoutExt = import_path5.default.parse(cleanName).name;
+          const baseNameWithoutExt = import_path4.default.parse(cleanName).name;
           const brandedName = generateBrandedFilename(
-            baseNameWithoutExt + import_path5.default.extname(cleanName),
+            baseNameWithoutExt + import_path4.default.extname(cleanName),
             format,
             format,
             "compress",
@@ -12443,7 +11355,7 @@ async function registerRoutes(app2) {
           const job = await storage.getCompressionJob(resultId);
           if (job && job.compressedPath && job.status === "completed") {
             await import_promises.default.access(job.compressedPath);
-            const filename = import_path5.default.basename(job.compressedPath);
+            const filename = import_path4.default.basename(job.compressedPath);
             validFiles.push({
               name: filename,
               path: job.compressedPath,
@@ -12453,7 +11365,7 @@ async function registerRoutes(app2) {
             const specialFormatExtensions = ["tiff", "avif", "webp", "png", "jpg", "jpeg"];
             let filePath = null;
             for (const ext of specialFormatExtensions) {
-              const potentialPath = import_path5.default.join("converted", `${resultId}.${ext}`);
+              const potentialPath = import_path4.default.join("converted", `${resultId}.${ext}`);
               try {
                 await import_promises.default.access(potentialPath);
                 filePath = potentialPath;
@@ -12462,11 +11374,11 @@ async function registerRoutes(app2) {
               }
             }
             if (filePath) {
-              const filename = import_path5.default.basename(filePath);
+              const filename = import_path4.default.basename(filePath);
               validFiles.push({
                 name: filename,
                 path: filePath,
-                originalName: `converted_image.${import_path5.default.extname(filePath).substring(1)}`
+                originalName: `converted_image.${import_path4.default.extname(filePath).substring(1)}`
               });
             }
           }
@@ -12560,46 +11472,84 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/universal-usage-stats", async (req, res) => {
     try {
-      res.setHeader("Cache-Control", "no-store");
+      res.setHeader("Cache-Control", "public, max-age=10");
       const sessionId = req.sessionID;
       const userId2 = req.user?.id;
+      const cacheKey = `universal_stats_${userId2 || "anon"}_${sessionId}`;
+      const cached = global.universalStatsCache?.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < 15e3) {
+        console.log("\u26A1 Using cached universal stats for performance");
+        return res.json(cached.data);
+      }
+      if (!global.universalStatsCache) {
+        global.universalStatsCache = /* @__PURE__ */ new Map();
+      }
       let userType = "anonymous";
       let hasBonusOperations = false;
       if (userId2) {
         try {
-          const user = await storage.getUser(userId2);
+          const userPromise = storage.getUser(userId2);
+          const timeoutPromise = new Promise(
+            (_, reject) => setTimeout(() => reject(new Error("User lookup timeout")), 3e3)
+          );
+          const user = await Promise.race([userPromise, timeoutPromise]);
           userType = user?.subscriptionTier || "free";
           hasBonusOperations = (user?.purchasedCredits || 0) > 0;
         } catch (error) {
-          console.error("Error getting user in universal-usage-stats:", error);
+          console.error("Error getting user in universal-usage-stats (using fallback):", error);
           userType = "anonymous";
         }
       }
-      const tracker = new DualUsageTracker(userId2, sessionId, userType);
-      const stats = await tracker.getUsageStats();
-      if (userType === "free_registered" && hasBonusOperations) {
-        stats.regular.monthly.limit = 600;
-        stats.combined.monthly.limit = stats.raw.monthly.limit + 600;
+      try {
+        const tracker = new DualUsageTracker(userId2, sessionId, userType);
+        const statsPromise = tracker.getUsageStats();
+        const timeoutPromise = new Promise(
+          (_, reject) => setTimeout(() => reject(new Error("Stats lookup timeout")), 5e3)
+        );
+        const stats = await Promise.race([statsPromise, timeoutPromise]);
+        if (userType === "free_registered" && hasBonusOperations) {
+          stats.regular.monthly.limit = 600;
+          stats.combined.monthly.limit = stats.raw.monthly.limit + 600;
+        }
+        const response = {
+          userType,
+          stats,
+          limits: OPERATION_CONFIG.limits[userType]
+        };
+        global.universalStatsCache.set(cacheKey, {
+          data: response,
+          timestamp: Date.now()
+        });
+        if (global.universalStatsCache.size > 100) {
+          const entries = Array.from(global.universalStatsCache.entries());
+          const oldEntries = entries.slice(0, entries.length - 100);
+          oldEntries.forEach(([key]) => global.universalStatsCache.delete(key));
+        }
+        console.log(`\u26A1 Stats API completed: userId=${userId2}, userType=${userType}`);
+        res.json(response);
+      } catch (statsError) {
+        console.error("Stats lookup failed, using fallback:", statsError);
+        const fallbackResponse = {
+          userType,
+          stats: {
+            regular: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1e3 } },
+            raw: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1e3 } },
+            combined: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1e3 } }
+          },
+          limits: OPERATION_CONFIG.limits[userType] || OPERATION_CONFIG.limits.anonymous
+        };
+        res.json(fallbackResponse);
       }
-      console.log(`\u{1F527} Stats API called: userId=${userId2}, sessionId=${sessionId}, userType=${userType}`);
-      console.log(`\u{1F527} Stats returned:`, JSON.stringify(stats, null, 2));
-      res.json({
-        userType,
-        stats,
-        limits: OPERATION_CONFIG.limits[userType]
-      });
     } catch (error) {
-      console.error("Error fetching usage stats:", error);
-      return res.json({
-        success: true,
-        dailyUsed: 0,
-        dailyLimit: 100,
-        monthlyUsed: 0,
-        monthlyLimit: 1e3,
-        canUpload: true,
-        raw: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1e3 } },
-        regular: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1e3 } },
-        combined: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1e3 } }
+      console.error("Critical error in universal-usage-stats:", error);
+      res.json({
+        userType: "anonymous",
+        stats: {
+          regular: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1e3 } },
+          raw: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1e3 } },
+          combined: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1e3 } }
+        },
+        limits: OPERATION_CONFIG.limits.anonymous
       });
     }
   });
@@ -13901,7 +12851,7 @@ async function registerRoutes(app2) {
         "Cache-Control": "public, max-age=3600",
         "Content-Type": "image/jpeg"
       });
-      const stream = (0, import_fs5.createReadStream)(job.originalPath);
+      const stream = (0, import_fs4.createReadStream)(job.originalPath);
       stream.pipe(res);
       stream.on("error", (streamError) => {
         console.error(`Stream error for job ${req.params.id}:`, streamError);
@@ -13944,7 +12894,7 @@ async function registerRoutes(app2) {
         "Cache-Control": "public, max-age=3600",
         "Content-Type": mimeType
       });
-      const stream = (0, import_fs5.createReadStream)(job.compressedPath);
+      const stream = (0, import_fs4.createReadStream)(job.compressedPath);
       stream.pipe(res);
       stream.on("error", (streamError) => {
         console.error("Stream error:", streamError);
@@ -13964,7 +12914,7 @@ async function registerRoutes(app2) {
         const specialFormatExtensions = ["tiff", "avif", "webp", "png", "jpg", "jpeg"];
         let filePath = null;
         for (const ext2 of specialFormatExtensions) {
-          const potentialPath = import_path5.default.join("converted", `${req.params.id}.${ext2}`);
+          const potentialPath = import_path4.default.join("converted", `${req.params.id}.${ext2}`);
           try {
             await import_promises.default.access(potentialPath);
             filePath = potentialPath;
@@ -13976,7 +12926,7 @@ async function registerRoutes(app2) {
           return res.status(404).json({ error: "Compressed file not found" });
         }
         const stats = await import_promises.default.stat(filePath);
-        const ext = import_path5.default.extname(filePath).substring(1).toLowerCase();
+        const ext = import_path4.default.extname(filePath).substring(1).toLowerCase();
         let contentType2;
         switch (ext) {
           case "png":
@@ -14002,7 +12952,7 @@ async function registerRoutes(app2) {
         res.setHeader("Content-Type", contentType2);
         res.setHeader("Content-Disposition", `attachment; filename="${downloadName}"`);
         res.setHeader("Content-Length", stats.size);
-        const fileStream = (0, import_fs5.createReadStream)(filePath);
+        const fileStream = (0, import_fs4.createReadStream)(filePath);
         fileStream.pipe(res);
         console.log(`Special format download: ${filePath} (${stats.size} bytes) as ${downloadName}`);
         return;
@@ -14051,7 +13001,7 @@ async function registerRoutes(app2) {
         console.log(`File size: ${stats.size} bytes`);
         console.log(`=== END DOWNLOAD DEBUG ===`);
         res.setHeader("Content-Length", stats.size);
-        const stream = (0, import_fs5.createReadStream)(job.compressedPath);
+        const stream = (0, import_fs4.createReadStream)(job.compressedPath);
         stream.pipe(res);
         stream.on("error", (streamError) => {
           console.error("Download stream error:", streamError);
@@ -14285,7 +13235,7 @@ async function registerRoutes(app2) {
           if (fileBuffer.length === 0) {
             throw new Error("Empty file buffer");
           }
-          const compressedBuffer = await (0, import_sharp5.default)(fileBuffer).jpeg({ quality: GUEST_QUALITY, progressive: true }).toBuffer();
+          const compressedBuffer = await (0, import_sharp4.default)(fileBuffer).jpeg({ quality: GUEST_QUALITY, progressive: true }).toBuffer();
           storage.setGuestFile(jobId, compressedBuffer, file.originalname);
           const compressionRatio = (file.size - compressedBuffer.length) / file.size * 100;
           results.push({
@@ -14757,7 +13707,7 @@ async function registerRoutes(app2) {
           const jobId = (0, import_crypto5.randomUUID)();
           const originalFormat = getFileFormat(file.originalname);
           const outputExtension = outputFormat === "jpeg" ? "jpg" : outputFormat;
-          const outputPath = import_path5.default.join("converted", `${jobId}.${outputExtension}`);
+          const outputPath = import_path4.default.join("converted", `${jobId}.${outputExtension}`);
           console.log(`Converting ${file.originalname} (${originalFormat}) to ${outputFormat}`);
           console.log(`Input file path: ${file.path}`);
           console.log(`Output file path: ${outputPath}`);
@@ -14798,7 +13748,7 @@ async function registerRoutes(app2) {
           let previewUrl;
           let downloadUrl;
           try {
-            const thumbnailPath = await generateThumbnailFromRaw(outputPath, import_path5.default.dirname(outputPath), jobId);
+            const thumbnailPath = await generateThumbnailFromRaw(outputPath, import_path4.default.dirname(outputPath), jobId);
             if (thumbnailPath) {
               previewUrl = `/api/preview/${jobId}`;
               console.log(`\u2705 Thumbnail generated for ${outputFormat}: ${thumbnailPath}`);
@@ -15086,7 +14036,7 @@ async function compressImage(jobId, file, options) {
           quality = 75;
       }
     }
-    let sharpInstance = (0, import_sharp5.default)(file.path, {
+    let sharpInstance = (0, import_sharp4.default)(file.path, {
       // Enable advanced processing
       unlimited: true,
       sequentialRead: true
@@ -15111,7 +14061,7 @@ async function compressImage(jobId, file, options) {
         targetHeight = Math.round(metadata.height * scale);
       }
       sharpInstance = sharpInstance.resize(targetWidth, targetHeight, {
-        kernel: options.fastMode ? import_sharp5.default.kernel.nearest : import_sharp5.default.kernel.lanczos3,
+        kernel: options.fastMode ? import_sharp4.default.kernel.nearest : import_sharp4.default.kernel.lanczos3,
         // Fast vs high-quality resampling
         withoutEnlargement: true,
         withoutReduction: false
@@ -15136,7 +14086,7 @@ async function compressImage(jobId, file, options) {
         fileExtension = "jpg";
         mimeType = "image/jpeg";
     }
-    const outputPath = import_path5.default.join("compressed", `${jobId}.${fileExtension}`);
+    const outputPath = import_path4.default.join("compressed", `${jobId}.${fileExtension}`);
     console.log(`Output path for job ${jobId}: ${outputPath}`);
     if (options.outputFormat === "png") {
       const pngOptions = {
@@ -15258,9 +14208,9 @@ function getFileFormat(filename) {
 }
 async function generateThumbnailFromRaw(inputPath, outputDir, jobId) {
   try {
-    const previewsDir = import_path5.default.join(process.cwd(), "previews");
+    const previewsDir = import_path4.default.join(process.cwd(), "previews");
     await import_promises.default.mkdir(previewsDir, { recursive: true });
-    const thumbnailPath = import_path5.default.join(previewsDir, jobId + "_thumb.jpg");
+    const thumbnailPath = import_path4.default.join(previewsDir, jobId + "_thumb.jpg");
     const thumbnailCommand = `convert "${inputPath}" -resize "256x256>" -quality 60 -strip "${thumbnailPath}"`;
     console.log(`\u{1F5BC}\uFE0F Generating thumbnail from ${inputPath}: ${thumbnailCommand}`);
     await execAsync3(thumbnailCommand);
@@ -15278,7 +14228,7 @@ async function processSpecialFormatConversion(inputPath, outputPath, inputFormat
   height: 2560,
   maintainAspect: true
 }) {
-  const outputDir = import_path5.default.dirname(outputPath);
+  const outputDir = import_path4.default.dirname(outputPath);
   await import_promises.default.mkdir(outputDir, { recursive: true });
   let sharpInstance;
   try {
@@ -15336,8 +14286,8 @@ async function processSpecialFormatConversion(inputPath, outputPath, inputFormat
       console.log(`Running ImageMagick convert command: ${convertCommand}`);
       let thumbnailPromise;
       if (outputFormat === "tiff") {
-        const outputFilename = import_path5.default.basename(outputPath, import_path5.default.extname(outputPath));
-        thumbnailPromise = generateThumbnailFromRaw(tempTiffPath, import_path5.default.dirname(outputPath), outputFilename);
+        const outputFilename = import_path4.default.basename(outputPath, import_path4.default.extname(outputPath));
+        thumbnailPromise = generateThumbnailFromRaw(tempTiffPath, import_path4.default.dirname(outputPath), outputFilename);
       }
       await execAsync3(convertCommand);
       const outputExists = await import_promises.default.access(outputPath).then(() => true).catch(() => false);
@@ -15345,10 +14295,10 @@ async function processSpecialFormatConversion(inputPath, outputPath, inputFormat
       let previewPath2;
       if (outputFormat === "tiff") {
         try {
-          const previewsDir = import_path5.default.dirname(outputPath).replace("/converted", "/previews");
+          const previewsDir = import_path4.default.dirname(outputPath).replace("/converted", "/previews");
           await import_promises.default.mkdir(previewsDir, { recursive: true });
-          const outputFilename = import_path5.default.basename(outputPath, import_path5.default.extname(outputPath));
-          previewPath2 = import_path5.default.join(previewsDir, outputFilename + ".jpg");
+          const outputFilename = import_path4.default.basename(outputPath, import_path4.default.extname(outputPath));
+          previewPath2 = import_path4.default.join(previewsDir, outputFilename + ".jpg");
           const previewCommand = `convert "${tempTiffPath}" -resize "512x512>" -quality 70 "${previewPath2}"`;
           console.log(`Generating TIFF preview: ${previewCommand}`);
           await execAsync3(previewCommand);
@@ -15376,14 +14326,14 @@ async function processSpecialFormatConversion(inputPath, outputPath, inputFormat
       const stats2 = await import_promises.default.stat(outputPath);
       return { success: true, outputSize: stats2.size, previewPath: thumbnailPath || previewPath2 };
     } else if (inputFormat === "svg") {
-      sharpInstance = (0, import_sharp5.default)(inputPath, {
+      sharpInstance = (0, import_sharp4.default)(inputPath, {
         density: 300
         // High DPI for SVG rasterization
       });
     } else if (inputFormat === "tiff") {
-      sharpInstance = (0, import_sharp5.default)(inputPath);
+      sharpInstance = (0, import_sharp4.default)(inputPath);
     } else {
-      sharpInstance = (0, import_sharp5.default)(inputPath);
+      sharpInstance = (0, import_sharp4.default)(inputPath);
     }
     if (options.resize) {
       const resizeOptions = {
@@ -15435,11 +14385,11 @@ async function processSpecialFormatConversion(inputPath, outputPath, inputFormat
     let previewPath;
     if (outputFormat === "tiff") {
       try {
-        const previewsDir = import_path5.default.dirname(outputPath).replace("/converted", "/previews");
+        const previewsDir = import_path4.default.dirname(outputPath).replace("/converted", "/previews");
         await import_promises.default.mkdir(previewsDir, { recursive: true });
-        const outputFilename = import_path5.default.basename(outputPath, import_path5.default.extname(outputPath));
-        previewPath = import_path5.default.join(previewsDir, outputFilename + ".jpg");
-        await (0, import_sharp5.default)(outputPath).resize(512, 512, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 70, progressive: true }).toFile(previewPath);
+        const outputFilename = import_path4.default.basename(outputPath, import_path4.default.extname(outputPath));
+        previewPath = import_path4.default.join(previewsDir, outputFilename + ".jpg");
+        await (0, import_sharp4.default)(outputPath).resize(512, 512, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 70, progressive: true }).toFile(previewPath);
         console.log(`TIFF preview generated: ${previewPath}`);
       } catch (previewError) {
         console.warn(`Failed to generate TIFF preview:`, previewError);
@@ -15497,13 +14447,6 @@ function registerResetEndpoints(app2) {
         `daily:${sessionId}:${pageIdentifier}`,
         `monthly:${sessionId}:${pageIdentifier}`
       ];
-      if (safeRedis) {
-        for (const key of cacheKeys) {
-          await safeRedis.del(key);
-          console.log(`\u{1F527} DEV: Cleared cache key: ${key}`);
-        }
-        clearedSystems++;
-      }
       try {
         await db.delete(anonymousSessionScopes).where(
           (0, import_drizzle_orm9.and)(
@@ -15542,7 +14485,7 @@ function registerResetEndpoints(app2) {
           sessionId,
           pageIdentifier,
           systems: clearedSystems,
-          redisKeys: cacheKeys.length,
+          redisEliminated: true,
           database: ["anonymousSessionScopes", "userUsage", "operationLog"]
         }
       });
@@ -15812,24 +14755,24 @@ function registerResetEndpoints(app2) {
 
 // server/viteStatic.ts
 var import_express7 = __toESM(require("express"), 1);
-var import_path6 = __toESM(require("path"), 1);
-var import_fs6 = __toESM(require("fs"), 1);
+var import_path5 = __toESM(require("path"), 1);
+var import_fs5 = __toESM(require("fs"), 1);
 function serveStatic(app2) {
-  const distPath = import_path6.default.resolve(process.cwd(), "dist");
+  const distPath = import_path5.default.resolve(process.cwd(), "dist");
   console.log(`\u{1F3D7}\uFE0F  Setting up static file serving from: ${distPath}`);
-  if (!import_fs6.default.existsSync(distPath)) {
+  if (!import_fs5.default.existsSync(distPath)) {
     console.error(`\u274C Static files directory not found: ${distPath}`);
   } else {
     console.log(`\u2705 Static files directory found: ${distPath}`);
-    const files = import_fs6.default.readdirSync(distPath);
+    const files = import_fs5.default.readdirSync(distPath);
     console.log(`\u{1F4C1} Files in dist: ${files.join(", ")}`);
   }
   app2.use(import_express7.default.static(distPath));
   app2.get("*", (req, res, next) => {
     if (req.path.startsWith("/api/")) return next();
-    if (import_path6.default.extname(req.path)) return next();
-    const indexPath = import_path6.default.join(distPath, "index.html");
-    if (!import_fs6.default.existsSync(indexPath)) {
+    if (import_path5.default.extname(req.path)) return next();
+    const indexPath = import_path5.default.join(distPath, "index.html");
+    if (!import_fs5.default.existsSync(indexPath)) {
       console.error(`\u274C index.html not found at: ${indexPath}`);
       return res.status(404).send("index.html not found");
     }
@@ -16023,7 +14966,7 @@ app.use((req, res, next) => {
 });
 app.use((req, res, next) => {
   const start = Date.now();
-  const path8 = req.path;
+  const path7 = req.path;
   let capturedJsonResponse = void 0;
   const originalResJson = res.json;
   res.json = function(bodyJson, ...args) {
@@ -16032,8 +14975,8 @@ app.use((req, res, next) => {
   };
   res.on("finish", () => {
     const duration = Date.now() - start;
-    if (path8.startsWith("/api")) {
-      console.log(`${req.method} ${path8} ${res.statusCode} in ${duration}ms`);
+    if (path7.startsWith("/api")) {
+      console.log(`${req.method} ${path7} ${res.statusCode} in ${duration}ms`);
     }
   });
   next();
@@ -16049,7 +14992,7 @@ app.use((req, res, next) => {
   });
   console.log("\u{1F680} Starting in production mode - serving static files");
   serveStatic(app);
-  const port = parseInt(process.env.PORT || "5000", 10);
+  const port = parseInt(process.env.PORT || "3000", 10);
   const hostname = "0.0.0.0";
   const server = httpServer.listen(port, hostname, () => {
     console.log(`\u{1F31F} Production server running on port ${port} on ${hostname}`);

@@ -4,20 +4,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
     
-    <!-- PERFORMANCE: Preload critical fonts -->
+    <!-- CRITICAL PERFORMANCE: Early preconnects for fastest loading -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://pagead2.googlesyndication.com">
+    <link rel="preconnect" href="https://www.googletagmanager.com">
     
-    <!-- Preload key font variants with font-display: swap -->
-    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;500;600;700&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <!-- OPTIMIZED: Single combined font request to reduce network calls -->
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@400;500;600&family=Open+Sans:wght@400;500;600&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
     
     <!-- Fallback for non-JS -->
     <noscript>
-      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
-      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap">
-      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;500;600;700&display=swap">
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@400;500;600&family=Open+Sans:wght@400;500;600&display=swap">
     </noscript>
     
     <title>MicroJPEG - Smart Image Compression Made Easy | Reduce File Size by 90%</title>
@@ -86,23 +84,25 @@
     <meta itemprop="name" content="MicroJPEG - Smart Image Compression Made Easy | Reduce File Size by 90%" />
     <meta itemprop="description" content="Smart image compression made easy. Reduce file sizes by 90% with intelligent algorithms. Real examples: 3.2MB→384KB portraits, 5.8MB→642KB landscapes with perfect quality." />
     <meta itemprop="image" content="https://your-domain.replit.app/schema-image-compression-examples.jpg" />
-    <!-- Performance Optimizations: DNS Prefetch and Preconnect -->
-    <link rel="dns-prefetch" href="//fonts.googleapis.com">
-    <link rel="dns-prefetch" href="//fonts.gstatic.com">
+    <!-- Enhanced DNS prefetch and preconnect for ads -->
     <link rel="dns-prefetch" href="//pagead2.googlesyndication.com">
     <link rel="dns-prefetch" href="//googletagmanager.com">
     <link rel="dns-prefetch" href="//www.google-analytics.com">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="preconnect" href="https://pagead2.googlesyndication.com">
-    
-    <!-- Optimized Font Loading - Reduced font weights and combined requests -->
-    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@400;500;600&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@400;500;600&display=swap"></noscript>
     
-    <!-- AdSense with optimized loading -->
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9368777119109420"
-     crossorigin="anonymous"></script>
+    <!-- OPTIMIZED: Lazy-loaded AdSense to prevent blocking -->
+    <script>
+      // Lazy load ads after page is fully interactive
+      window.addEventListener('load', () => {
+        setTimeout(() => {
+          const adsScript = document.createElement('script');
+          adsScript.async = true;
+          adsScript.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9368777119109420';
+          adsScript.crossOrigin = 'anonymous';
+          document.head.appendChild(adsScript);
+        }, 1000); // Load ads 1 second after page load
+      });
+    </script>
      
     <!-- Advanced JSON-LD Structured Data for Maximum SEO Impact -->
     <script type="application/ld+json">
