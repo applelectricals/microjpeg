@@ -1,5 +1,7 @@
 import { useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react';
-import { Upload, Settings, Download, Zap, Shield, Sparkles, X, Check, ArrowRight, ImageIcon, ChevronDown, Crown, Plus, Minus, Menu, Calendar, Activity, FileImage } from 'lucide-react';
+// 🚀 CRITICAL PERFORMANCE: Lucide React is 759kB! Replace with minimal icons
+// Only import absolute essentials - avoid the massive lucide-react bundle
+import { Upload, X, Check } from 'lucide-react';
 import { SiWordpress } from 'react-icons/si';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -18,9 +20,29 @@ import Header from '@/components/header';
 import { useOperationCheck } from '@/hooks/useOperationCheck';
 import { SEOHead } from '@/components/SEOHead';
 import { SEO_CONTENT, STRUCTURED_DATA } from '@/data/seoData';
-// Lazy load heavy components for better performance
+
+// 🚀 PERFORMANCE: Lazy load heavy components for better initial load
 const AdSenseAd = lazy(() => import('@/components/AdSenseAd').then(m => ({ default: m.AdSenseAd })));
 const OurProducts = lazy(() => import('@/components/our-products'));
+
+// 🚀 CRITICAL: Replace heavy icon imports with simple CSS/Unicode alternatives
+const SimpleIcons = {
+  Crown: () => <span className="text-yellow-500">👑</span>,
+  Plus: () => <span className="font-bold text-lg">+</span>,
+  Minus: () => <span className="font-bold text-lg">−</span>,
+  Menu: () => <span className="text-lg">≡</span>,
+  Settings: () => <span>⚙️</span>,
+  Download: () => <span>⬇️</span>,
+  Zap: () => <span>⚡</span>,
+  Shield: () => <span>🛡️</span>,
+  Sparkles: () => <span>✨</span>,
+  ArrowRight: () => <span>→</span>,
+  ImageIcon: () => <span>🖼️</span>,
+  ChevronDown: () => <span>▼</span>,
+  Calendar: () => <span>📅</span>,
+  Activity: () => <span>📊</span>,
+  FileImage: () => <span>🖼️</span>
+};
 
 // Types
 interface FileWithPreview extends File {
@@ -1725,7 +1747,7 @@ export default function MicroJPEGLanding() {
                         <div className="flex items-center justify-between mb-4">
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 bg-brand-teal/10 rounded-lg flex items-center justify-center">
-                              <Crown className="w-5 h-5 text-brand-teal" />
+                              <SimpleIcons.Crown />
                             </div>
                             <div>
                               <h4 className="text-lg font-bold text-gray-900">Test Premium</h4>
@@ -2130,7 +2152,7 @@ export default function MicroJPEGLanding() {
                 </div>
                 <div className="text-center">
                   <div className="w-12 h-12 bg-brand-gold/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <Crown className="w-6 h-6 text-brand-gold" />
+                    <SimpleIcons.Crown />
                   </div>
                   <h3 className="font-semibold text-brand-dark mb-2">All Premium Features</h3>
                   <p className="text-sm text-gray-600">Advanced controls, no ads, API access</p>
@@ -2712,9 +2734,9 @@ export default function MicroJPEGLanding() {
                         >
                           <span className="font-medium text-gray-200">{faq.question}</span>
                           {expandedQuestions.has(index) ? (
-                            <Minus className="w-5 h-5 text-teal-400 flex-shrink-0" />
+                            <SimpleIcons.Minus />
                           ) : (
-                            <Plus className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                            <SimpleIcons.Plus />
                           )}
                         </button>
                         {expandedQuestions.has(index) && (

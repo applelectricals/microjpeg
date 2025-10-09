@@ -55,20 +55,39 @@ export const getQueryFn: <T>(options: {
     const sessionId = sessionManager.getSessionId();
     const pageIdentifier = getCurrentPageIdentifier();
     
-    const res = await fetch(queryKey.join("/") as string, {
-      credentials: "include",
-      headers: {
-        'X-Session-Id': sessionId,
-        'X-Page-Identifier': pageIdentifier,
-      },
-    });
+    // 🚀 PERFORMANCE: Add timeout to prevent long waits for auth checks
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+    
+    try {
+      const res = await fetch(queryKey.join("/") as string, {
+        credentials: "include",
+        headers: {
+          'X-Session-Id': sessionId,
+          'X-Page-Identifier': pageIdentifier,
+        },
+        signal: controller.signal,
+      });
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
+      clearTimeout(timeoutId);
+
+      if (unauthorizedBehavior === "returnNull" && res.status === 401) {
+        return null;
+      }
+
+      await throwIfResNotOk(res);
+      return await res.json();
+    } catch (error) {
+      clearTimeout(timeoutId);
+      // If it's an auth check that times out, return null instead of throwing
+      if (unauthorizedBehavior === "returnNull" && (
+        (error as Error)?.name === 'AbortError' || 
+        (error as Error)?.message?.includes('timeout')
+      )) {
+        return null;
+      }
+      throw error;
     }
-
-    await throwIfResNotOk(res);
-    return await res.json();
   };
 
 export const queryClient = new QueryClient({
