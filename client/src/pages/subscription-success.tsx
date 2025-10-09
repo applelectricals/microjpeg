@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CheckCircle, Crown, Zap, ArrowRight } from "lucide-react";
-import backgroundImg from "@assets/pexels-public-domain-pictures-40984_1754826447786.jpg";
+import backgroundImg from "@assets/background.webp";
 
 export default function SubscriptionSuccess() {
   const [planType, setPlanType] = useState<'test-premium' | 'premium' | 'enterprise'>('test-premium');
