@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Menu, X, Activity, Clock, Calendar, Image, Camera } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
-import logoUrl from '@assets/Header_Logo20KB.svg';
+import logoUrl from '@assets/LOGO.svg';
 import { FORMATS } from '@/data/conversionMatrix';
 
 export default function Header() {
@@ -285,7 +285,7 @@ export default function Header() {
             <img 
               src={logoUrl} 
               alt="MicroJPEG Logo" 
-              className="w-8 h-8 object-contain"
+              className="w-8 h-8 object-contain rounded-lg bg-white/80 p-1"
             />
             <div className="flex flex-col">
               <span className="text-lg font-bold font-poppins text-brand-dark">MicroJPEG</span>
@@ -351,7 +351,7 @@ export default function Header() {
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-              <img src={logoUrl} alt="MicroJPEG Logo" className="w-8 h-8 sm:w-[45px] sm:h-[45px]" fetchpriority="high" />
+              <img src={logoUrl} alt="MicroJPEG Logo" className="w-8 h-8 sm:w-[45px] sm:h-[45px] rounded-lg bg-white/80 p-1" fetchpriority="high" />
               <div className="flex flex-col">
                 <span className="text-lg sm:text-2xl font-bold font-poppins text-brand-dark whitespace-nowrap">MicroJPEG</span>
                 <span className="text-xs font-opensans text-brand-dark/70 tracking-widest whitespace-nowrap">PICTURE PERFECT</span>
