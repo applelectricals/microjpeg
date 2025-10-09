@@ -17,6 +17,7 @@ import { emailService } from "./emailService";
 import { insertCompressionJobSchema, specialFormatTrials, creditPurchases, users, userUsage, type SpecialFormatTrial } from "@shared/schema";
 import { z } from "zod";
 import CompressionEngine from "./compressionEngine";
+import { fileCacheService } from "./fileCacheService";
 import { db } from "./db";
 import { and, eq, gt, sql } from "drizzle-orm";
 import { compressToTargetSize, generateOptimizationInsights } from "./compressionUtils";
@@ -1312,13 +1313,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         settings.compressionAlgorithm = 'standard'; // Use standard instead of aggressive compression
       }
 
-      const results = [];
-      const jobs = [];
-      
       console.log("Compression settings received:", settings);
       console.log("Files to process:", files.map(f => ({ name: f.originalname, ext: f.originalname.split('.').pop() })));
       console.log("=== PROCESSING FILES WITH SHARP + IMAGEMAGICK ===");
       
+      // ✅ OPTIMIZATION: Cache uploaded files for future format conversions
+      const cachedFileIds: string[] = [];
+      for (const file of files) {
+        const cacheId = fileCacheService.cacheFile(file, req.sessionID);
+        cachedFileIds.push(cacheId);
+        console.log(`📁 Cached ${file.originalname} as ${cacheId}`);
+      }
+
+      // ✅ OPTIMIZATION: Batch create all database jobs to reduce round trips
+      const jobPromises = [];
+      const jobMetadata = [];
+
       // Create database jobs for each file and format combination
       for (const file of files) {
         // Handle multiple output formats
@@ -1333,25 +1343,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
         console.log(`Determined outputFormats: [${outputFormats.join(', ')}]`);
 
-        // Create a separate job for each format
-        console.log(`File: ${file.originalname}, outputFormats array: [${outputFormats.join(', ')}], settings.outputFormat: ${settings.outputFormat}`);
+        // Prepare job creation promises for batch execution
         for (const outputFormat of outputFormats) {
-          console.log(`Creating compression job for user ${user?.id}, file: ${file.originalname}, format: ${outputFormat}`);
-          const job = await storage.createCompressionJob({
+          console.log(`Preparing compression job for user ${user?.id}, file: ${file.originalname}, format: ${outputFormat}`);
+          
+          const jobPromise = storage.createCompressionJob({
             userId: user?.id || null,
-            sessionId: req.sessionID, // For guest users
+            sessionId: req.sessionID,
             originalFilename: file.originalname,
             status: "pending",
             outputFormat: outputFormat,
             originalPath: file.path,
           });
           
-          console.log(`Created job ${job.id} for user ${user?.id || 'guest'}`);
-          jobs.push({ job, file, outputFormat });
+          jobPromises.push(jobPromise);
+          jobMetadata.push({ file, outputFormat });
         }
       }
+
+      // ✅ BATCH EXECUTION: Create all jobs simultaneously
+      console.log(`🚀 Creating ${jobPromises.length} jobs in batch...`);
+      const createdJobs = await Promise.all(jobPromises);
       
-      // Process jobs and update them
+      // Combine jobs with metadata
+      const jobs = createdJobs.map((job, index) => ({
+        job,
+        file: jobMetadata[index].file,
+        outputFormat: jobMetadata[index].outputFormat
+      }));
+      
+      console.log(`✅ Created ${jobs.length} jobs in batch`);
+
+      // Process jobs and collect update promises for batch execution
+      const updatePromises = [];
+      const results = [];
+
+      // ✅ OPTIMIZATION: Process all jobs and collect updates for batch execution
       for (const { job, file, outputFormat } of jobs) {
         try {
           // PNG conversion is now enabled for all users including free users
@@ -1472,19 +1499,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Calculate compression ratio using original file size
           const compressionRatio = Math.round((1 - compressedStats.size / originalStats.size) * 100);
           
-          // Update job with compression results - wrap in try/catch to prevent database crashes
-          try {
-            await storage.updateCompressionJob(job.id, {
-              status: "completed",
-              compressedPath: outputPath,
-              compressedSize: compressedStats.size,
-              compressionRatio: compressionRatio,
-              outputFormat: outputFormat, // Store the actual output format
-            });
-          } catch (dbError) {
-            console.error(`Database update failed for job ${job.id}:`, dbError);
-            // Continue processing even if database update fails
-          }
+          // ✅ OPTIMIZATION: Collect job updates for batch execution
+          const jobUpdate = storage.updateCompressionJob(job.id, {
+            status: "completed",
+            compressedPath: outputPath,
+            compressedSize: compressedStats.size,
+            compressionRatio: compressionRatio,
+            outputFormat: outputFormat,
+          });
+          updatePromises.push(jobUpdate);
 
           const resultData = {
             id: job.id, // Use actual job ID
@@ -1515,15 +1538,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
         } catch (jobError) {
           console.error(`Error compressing ${file.originalname} to ${outputFormat}:`, jobError);
-          // Update job with error - wrap in try/catch to prevent secondary crashes
-          try {
-            await storage.updateCompressionJob(job.id, {
-              status: "failed",
-              errorMessage: jobError instanceof Error ? jobError.message : "Compression failed",
-            });
-          } catch (dbError) {
-            console.error(`Database update failed for failed job ${job.id}:`, dbError);
-          }
+          // ✅ OPTIMIZATION: Collect error updates for batch execution
+          const errorUpdate = storage.updateCompressionJob(job.id, {
+            status: "failed",
+            errorMessage: jobError instanceof Error ? jobError.message : "Compression failed",
+          });
+          updatePromises.push(errorUpdate);
           
           results.push({
             id: job.id,
@@ -1531,6 +1551,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
             error: "Compression failed"
           });
         }
+      }
+
+      // ✅ BATCH EXECUTION: Execute all database updates simultaneously
+      console.log(`🚀 Executing ${updatePromises.length} database updates in batch...`);
+      try {
+        await Promise.allSettled(updatePromises); // Use allSettled to handle partial failures
+        console.log(`✅ Completed ${updatePromises.length} database updates in batch`);
+      } catch (batchError) {
+        console.error('Batch database update error:', batchError);
+        // Continue processing even if some updates fail
       }
       
       // Clean up original uploaded files (only after processing all formats)
@@ -1579,12 +1609,213 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ 
         results,
         batchId: batchId,
-        batchDownloadUrl: `/api/download-zip/${batchId}`
+        batchDownloadUrl: `/api/download-zip/${batchId}`,
+        cachedFileIds: cachedFileIds // ✅ OPTIMIZATION: Include cached file IDs for future conversions
       });
       
     } catch (error) {
       console.error("Compression error:", error);
       res.status(500).json({ error: "Compression failed" });
+    }
+  });
+
+  // ✅ OPTIMIZATION: Intelligent engine selection for maximum performance
+  function getOptimalEngine(inputFormat: string, outputFormat: string): 'sharp' | 'imagemagick' | 'dcraw' {
+    const rawFormats = ['dng', 'cr2', 'nef', 'arw', 'orf', 'raf', 'rw2'];
+    const sharpFormats = ['jpg', 'jpeg', 'png', 'webp', 'avif'];
+    
+    // RAW files always use dcRAW
+    if (rawFormats.includes(inputFormat.toLowerCase())) {
+      return 'dcraw';
+    }
+    
+    // SVG or TIFF operations use ImageMagick
+    if (inputFormat === 'svg' || outputFormat === 'tiff' || inputFormat === 'tiff') {
+      return 'imagemagick';
+    }
+    
+    // Standard formats use Sharp (fastest)
+    if (sharpFormats.includes(inputFormat.toLowerCase()) && sharpFormats.includes(outputFormat.toLowerCase())) {
+      return 'sharp';
+    }
+    
+    // Default to ImageMagick for complex conversions
+    return 'imagemagick';
+  }
+
+  // ✅ OPTIMIZATION: Sharp processing (fastest for standard formats)
+  async function processWithSharp(inputPath: string, outputPath: string, outputFormat: string, settings: any) {
+    let sharpOperation = sharp(inputPath);
+    
+    // Apply resize if specified
+    if (settings?.resizeOption === 'resize-percentage' && settings?.resizePercentage && settings.resizePercentage < 100) {
+      const metadata = await sharpOperation.metadata();
+      if (metadata.width && metadata.height) {
+        const targetWidth = Math.round(metadata.width * (settings.resizePercentage / 100));
+        const targetHeight = Math.round(metadata.height * (settings.resizePercentage / 100));
+        sharpOperation = sharpOperation.resize(targetWidth, targetHeight, {
+          fit: 'inside',
+          withoutEnlargement: true
+        });
+      }
+    }
+    
+    // Format-specific optimization
+    const formatOptions: any = {
+      quality: settings?.quality || 80,
+      ...(outputFormat === 'png' && { compressionLevel: 8 }),
+      ...(outputFormat === 'webp' && { effort: 4 }), // Fast WebP
+      ...(outputFormat === 'avif' && { effort: 2 }), // Fast AVIF
+    };
+    
+    await sharpOperation
+      .toFormat(outputFormat as keyof sharp.FormatEnum, formatOptions)
+      .toFile(outputPath);
+      
+    return { success: true, engine: 'sharp' };
+  }
+
+  // ✅ OPTIMIZATION: ImageMagick processing (for TIFF/SVG)
+  async function processWithImageMagick(inputPath: string, outputPath: string, outputFormat: string, settings: any) {
+    const execAsync = promisify(exec);
+    const quality = settings?.quality || 80;
+    
+    let command = `magick "${inputPath}"`;
+    
+    // Add resize if specified
+    if (settings?.resizeOption === 'resize-percentage' && settings?.resizePercentage && settings.resizePercentage < 100) {
+      command += ` -resize ${settings.resizePercentage}%`;
+    }
+    
+    // Add quality
+    command += ` -quality ${quality}`;
+    
+    // TIFF-specific optimizations
+    if (outputFormat === 'tiff') {
+      command += ` -compress lzw`;
+    }
+    
+    command += ` "${outputPath}"`;
+    
+    await execAsync(command);
+    return { success: true, engine: 'imagemagick' };
+  }
+
+  // ✅ OPTIMIZATION: Format conversion using cached files (avoids re-upload)
+  app.post("/api/convert-cached", requireScopeFromAuth, async (req, res) => {
+    try {
+      const { cachedFileIds, outputFormat, settings } = req.body;
+      
+      if (!cachedFileIds || !Array.isArray(cachedFileIds) || cachedFileIds.length === 0) {
+        return res.status(400).json({ error: "No cached file IDs provided" });
+      }
+      
+      if (!outputFormat) {
+        return res.status(400).json({ error: "Output format not specified" });
+      }
+
+      console.log(`🔄 Converting ${cachedFileIds.length} cached files to ${outputFormat}`);
+      
+      // Get cached files
+      const cachedFiles = [];
+      for (const fileId of cachedFileIds) {
+        const cached = fileCacheService.getCachedFile(fileId);
+        if (!cached) {
+          return res.status(404).json({ 
+            error: `Cached file not found: ${fileId}` 
+          });
+        }
+        cachedFiles.push({ fileId, cached });
+      }
+
+      // Validate session access
+      const sessionId = req.sessionID;
+      const hasAccess = cachedFiles.every(({cached}) => cached.sessionId === sessionId);
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Access denied to cached files" });
+      }
+
+      // Process conversions
+      const results = [];
+      const jobs = [];
+
+      // Create database jobs
+      for (const {fileId, cached} of cachedFiles) {
+        const job = await storage.createCompressionJob({
+          userId: req.user?.id || null,
+          sessionId: sessionId,
+          originalFilename: cached.originalName,
+          status: "pending",
+          outputFormat: outputFormat,
+          originalPath: cached.originalPath,
+        });
+        jobs.push({ job, cached, fileId });
+      }
+
+      // Process conversions with optimal engine selection
+      for (const { job, cached } of jobs) {
+        try {
+          const inputFormat = cached.originalName.split('.').pop()?.toLowerCase() || '';
+          const engine = getOptimalEngine(inputFormat, outputFormat);
+          
+          console.log(`🔧 Converting ${cached.originalName} using ${engine} engine: ${inputFormat} → ${outputFormat}`);
+          
+          const outputPath = path.join("compressed", `${job.id}.${outputFormat}`);
+          
+          let result;
+          if (engine === 'sharp') {
+            result = await processWithSharp(cached.originalPath, outputPath, outputFormat, settings);
+          } else if (engine === 'imagemagick') {
+            result = await processWithImageMagick(cached.originalPath, outputPath, outputFormat, settings);
+          } else {
+            result = await processSpecialFormatConversion(cached.originalPath, outputPath, inputFormat, outputFormat, settings);
+          }
+
+          // Update job
+          const originalStats = await fs.stat(cached.originalPath);
+          const compressedStats = await fs.stat(outputPath);
+          const compressionRatio = Math.round((1 - compressedStats.size / originalStats.size) * 100);
+          
+          await storage.updateCompressionJob(job.id, {
+            status: "completed",
+            compressedPath: outputPath,
+            compressedSize: compressedStats.size,
+            compressionRatio: compressionRatio,
+            outputFormat: outputFormat,
+          });
+
+          results.push({
+            id: job.id,
+            originalName: cached.originalName,
+            originalSize: originalStats.size,
+            compressedSize: compressedStats.size,
+            compressionRatio,
+            downloadUrl: `/api/download/${job.id}`,
+            originalFormat: cached.mimetype.split('/')[1]?.toUpperCase() || 'UNKNOWN',
+            outputFormat: outputFormat.toUpperCase(),
+            wasConverted: true,
+            engine: engine
+          });
+
+        } catch (error) {
+          console.error(`Conversion failed for ${cached.originalName}:`, error);
+          await storage.updateCompressionJob(job.id, {
+            status: "failed",
+            error: error.message
+          });
+          
+          results.push({
+            error: `Failed to convert ${cached.originalName}: ${error.message}`,
+            originalName: cached.originalName
+          });
+        }
+      }
+
+      res.json({ results });
+      
+    } catch (error) {
+      console.error("Cached conversion error:", error);
+      res.status(500).json({ error: "Cached conversion failed" });
     }
   });
 
@@ -1974,64 +2205,123 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ✅ USER-TYPE-BASED UNIVERSAL COUNTER API - NO CACHE FOR REAL-TIME UPDATES
+  // ✅ USER-TYPE-BASED UNIVERSAL COUNTER API - OPTIMIZED WITH CACHING
   app.get('/api/universal-usage-stats', async (req, res) => {
     try {
-      // Disable caching for real-time updates
-      res.setHeader('Cache-Control', 'no-store');
+      // Set shorter cache for performance balance
+      res.setHeader('Cache-Control', 'public, max-age=10'); // 10 second cache
       
       const sessionId = req.sessionID;
       const userId = req.user?.id;
       
-      // Determine user type and bonus status
+      // Create cache key for this specific request
+      const cacheKey = `universal_stats_${userId || 'anon'}_${sessionId}`;
+      
+      // Check if we have a cached response
+      const cached = global.universalStatsCache?.get(cacheKey);
+      if (cached && (Date.now() - cached.timestamp) < 15000) { // 15 second cache
+        console.log('⚡ Using cached universal stats for performance');
+        return res.json(cached.data);
+      }
+      
+      // Initialize cache if not exists
+      if (!global.universalStatsCache) {
+        global.universalStatsCache = new Map();
+      }
+      
+      // Determine user type and bonus status with timeout
       let userType = 'anonymous';
       let hasBonusOperations = false;
+      
       if (userId) {
         try {
-          const user = await storage.getUser(userId);
+          // Add timeout to prevent hanging
+          const userPromise = storage.getUser(userId);
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('User lookup timeout')), 3000)
+          );
+          
+          const user = await Promise.race([userPromise, timeoutPromise]);
           userType = user?.subscriptionTier || 'free';
           hasBonusOperations = (user?.purchasedCredits || 0) > 0;
         } catch (error) {
-          console.error("Error getting user in universal-usage-stats:", error);
+          console.error("Error getting user in universal-usage-stats (using fallback):", error);
           userType = 'anonymous'; // Fallback to anonymous
         }
       }
       
-      // Create tracker instance - use exact same logic as recordOperation
-      const tracker = new DualUsageTracker(userId, sessionId, userType);
-      const stats = await tracker.getUsageStats();
-      
-      // Apply bonus operations for signed-in free users who have claimed it
-      if (userType === 'free_registered' && hasBonusOperations) {
-        stats.regular.monthly.limit = 600;
-        stats.combined.monthly.limit = stats.raw.monthly.limit + 600;
+      // Create tracker instance with timeout protection
+      try {
+        const tracker = new DualUsageTracker(userId, sessionId, userType);
+        
+        // Add timeout to prevent hanging on stats
+        const statsPromise = tracker.getUsageStats();
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Stats lookup timeout')), 5000)
+        );
+        
+        const stats = await Promise.race([statsPromise, timeoutPromise]);
+        
+        // Apply bonus operations for signed-in free users who have claimed it
+        if (userType === 'free_registered' && hasBonusOperations) {
+          stats.regular.monthly.limit = 600;
+          stats.combined.monthly.limit = stats.raw.monthly.limit + 600;
+        }
+        
+        const response = {
+          userType,
+          stats,
+          limits: OPERATION_CONFIG.limits[userType as keyof typeof OPERATION_CONFIG.limits]
+        };
+        
+        // Cache the successful response
+        global.universalStatsCache.set(cacheKey, {
+          data: response,
+          timestamp: Date.now()
+        });
+        
+        // Clean old cache entries (keep only last 100)
+        if (global.universalStatsCache.size > 100) {
+          const entries = Array.from(global.universalStatsCache.entries());
+          const oldEntries = entries.slice(0, entries.length - 100);
+          oldEntries.forEach(([key]) => global.universalStatsCache.delete(key));
+        }
+        
+        console.log(`⚡ Stats API completed: userId=${userId}, userType=${userType}`);
+        res.json(response);
+        
+      } catch (statsError) {
+        console.error('Stats lookup failed, using fallback:', statsError);
+        
+        // Return safe fallback stats immediately
+        const fallbackResponse = {
+          userType,
+          stats: {
+            regular: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1000 } },
+            raw: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1000 } },
+            combined: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1000 } }
+          },
+          limits: OPERATION_CONFIG.limits[userType as keyof typeof OPERATION_CONFIG.limits] || OPERATION_CONFIG.limits.anonymous
+        };
+        
+        res.json(fallbackResponse);
       }
       
-      // Debug logging to trace the issue
-      console.log(`🔧 Stats API called: userId=${userId}, sessionId=${sessionId}, userType=${userType}`);
-      console.log(`🔧 Stats returned:`, JSON.stringify(stats, null, 2));
-      
-      res.json({
-        userType,
-        stats,
-        limits: OPERATION_CONFIG.limits[userType as keyof typeof OPERATION_CONFIG.limits]
-      });
     } catch (error) {
-    console.error('Error fetching usage stats:', error);
-    // Return default stats on error
-    return res.json({
-      success: true,
-      dailyUsed: 0,
-      dailyLimit: 100,
-      monthlyUsed: 0,
-      monthlyLimit: 1000,
-      canUpload: true,
-      raw: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1000 } },
-      regular: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1000 } },
-      combined: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1000 } }
-    });
-  }
-});
+      console.error('Critical error in universal-usage-stats:', error);
+      
+      // Return safe fallback immediately
+      res.json({
+        userType: 'anonymous',
+        stats: {
+          regular: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1000 } },
+          raw: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1000 } },
+          combined: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1000 } }
+        },
+        limits: OPERATION_CONFIG.limits.anonymous
+      });
+    }
+  });
 
   // Check before processing
   app.post('/api/check-operation', async (req, res) => {

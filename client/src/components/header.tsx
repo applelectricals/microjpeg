@@ -329,7 +329,7 @@ export default function Header() {
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-              <img src={logoUrl} alt="MicroJPEG Logo" className="w-8 h-8 sm:w-[45px] sm:h-[45px]" />
+              <img src={logoUrl} alt="MicroJPEG Logo" className="w-8 h-8 sm:w-[45px] sm:h-[45px]" fetchpriority="high" />
               <div className="flex flex-col">
                 <span className="text-lg sm:text-2xl font-bold font-poppins text-brand-dark whitespace-nowrap">MicroJPEG</span>
                 <span className="text-xs font-opensans text-brand-dark/70 tracking-widest whitespace-nowrap">PICTURE PERFECT</span>

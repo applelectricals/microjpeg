@@ -3,6 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    
+    <!-- PERFORMANCE: Preload critical fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    
+    <!-- Preload key font variants with font-display: swap -->
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;500;600;700&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    
+    <!-- Fallback for non-JS -->
+    <noscript>
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap">
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;500;600;700&display=swap">
+    </noscript>
+    
     <title>MicroJPEG - Smart Image Compression Made Easy | Reduce File Size by 90%</title>
     <meta name="description" content="Best free JPEG compression tool online. Compress JPEG without quality loss up to 90% smaller files. Lossless algorithm preserves image quality. Real results: 3.2MB→384KB portraits, 5.8MB→642KB landscapes. TinyPNG alternative with batch processing." />
     <meta name="keywords" content="JPEG compression tool, compress JPEG without quality loss, free JPEG compressor, lossless JPEG compressor, online image compressor, best JPEG compression tool, reduce JPEG file size, TinyPNG alternative, batch compress JPEG online, optimize JPEG for web, image optimization for SEO, website speed optimization" />
@@ -320,7 +337,6 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <!-- This is a replit script which adds a banner on the top of the page when opened in development mode outside the replit environment -->
-    <script type="text/javascript" src="https://replit.com/public/js/replit-dev-banner.js"></script>
+    <!-- Replit dev banner removed for production performance (saves 2.6KB + 230ms) -->
   </body>
 </html>
