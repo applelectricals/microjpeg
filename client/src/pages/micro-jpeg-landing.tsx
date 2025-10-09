@@ -11,11 +11,10 @@ import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { apiRequest } from '@/lib/queryClient';
-// Removed redundant usage trackers - using DualCounter only
+// Removed redundant usage trackers and counters - focusing on core compression functionality
 import { sessionManager } from '@/lib/sessionManager';
 import { canConvert, recordCompression } from '@/lib/usageTracker';
 import Header from '@/components/header';
-import { DualCounter } from '@/components/DualCounter';
 import { useOperationCheck } from '@/hooks/useOperationCheck';
 import { SEOHead } from '@/components/SEOHead';
 import { SEO_CONTENT, STRUCTURED_DATA } from '@/data/seoData';
@@ -339,16 +338,7 @@ const isConversionRequest = (originalFormat: string, targetFormat: string): bool
 export default function MicroJPEGLanding() {
   const { isAuthenticated, user } = useAuth();
 
-  // Create helper functions for instant counter updates
-  const updateCounterOptimistically = (increment: number = 1) => {
-    console.log('🚀 Triggering optimistic counter update');
-    window.dispatchEvent(new CustomEvent('optimisticCounterUpdate', { detail: { increment } }));
-  };
-
-  const refreshUniversalCounter = () => {
-    console.log('🔄 Triggering universal counter refresh');
-    window.dispatchEvent(new Event('refreshUniversalCounter'));
-  };
+  // Simplified tracking - no counter dependencies
   
   // Use server usage data instead of local session data
   const [session, setSession] = useState<SessionData>(() => {
@@ -811,18 +801,10 @@ export default function MicroJPEGLanding() {
       setSession(newSession);
       sessionManager.updateSession(newSession);
 
-      // Instant counter update for zero-lag feedback
-      if (data.results && data.results.length > 0) {
-        updateCounterOptimistically(data.results.length);
-      }
-      
-      // Also refresh for backend verification with delay to ensure backend is updated
-      setTimeout(() => {
-        refreshUniversalCounter();
-      }, 500);
-      
+      // Compression completed successfully
+      console.log('✅ Compression completed');
 
-      // Usage stats are now automatically refreshed by header counter
+      // Usage stats tracking (backend only - no UI counters)
       setProcessingProgress(100);
       setProcessingStatus('MicroJPEG just saved you space!');
       setModalState('complete');
@@ -857,8 +839,8 @@ export default function MicroJPEGLanding() {
       setCurrentlyProcessingFormat(null); // Clear currently processing format
       setShowModal(false);
       
-      // Refresh counter to show current usage after failed operation
-      refreshUniversalCounter();
+      // Operation failed - continuing without counter dependencies
+      console.log('❌ Operation failed');
       
       // Don't clear selected files - keep them for thumbnails and format conversions
       // Clear newly added files to prevent reprocessing
@@ -1085,14 +1067,8 @@ export default function MicroJPEGLanding() {
         // Usage recording is handled server-side by DualUsageTracker
         // No additional frontend recording needed
         
-        // Instant counter update for zero-lag feedback
-        updateCounterOptimistically(data.results.length);
-        
-        // Also refresh for backend verification
-        refreshUniversalCounter();
-        
-        
-        console.log(`Recorded ${operationCount} operations for ${data.results.length} files converted to ${format}`);
+        // Operation completed successfully
+        console.log(`✅ Recorded ${operationCount} operations for ${data.results.length} files converted to ${format}`);
       }
 
       // Get the latest session data to ensure we don't lose any previous results

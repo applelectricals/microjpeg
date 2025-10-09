@@ -1,8 +1,8 @@
 import { SiWordpress } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { Menu, X, Activity, Clock, Calendar, Image, Camera } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { Menu, X } from "lucide-react";
+import { useState } from "react";
 import { useLocation } from "wouter";
 import logoUrl from '@assets/LOGO.svg';
 import { FORMATS } from '@/data/conversionMatrix';
@@ -10,98 +10,8 @@ import { FORMATS } from '@/data/conversionMatrix';
 export default function Header() {
   const { user, isAuthenticated } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [dualStats, setDualStats] = useState<any>(null);
   const [location] = useLocation();
-  const optimisticCounterRef = useRef<{monthly: number, daily: number, hourly: number} | null>(null);
 
-
-  // Fetch dual usage statistics for header display - ULTRA OPTIMIZED for performance
-  useEffect(() => {
-    const fetchDualStats = async () => {
-      try {
-        // Aggressive timeout to prevent blocking - 2 seconds max
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2000); // Reduced from 5s to 2s
-        
-        const response = await fetch('/api/universal-usage-stats', {
-          method: 'GET',
-          credentials: 'include',
-          cache: 'force-cache', // Aggressive caching to prevent repeated requests
-          signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (response.ok) {
-          const data = await response.json();
-          setDualStats(data);
-          // Store in sessionStorage for immediate reuse
-          sessionStorage.setItem('header-stats', JSON.stringify(data));
-          optimisticCounterRef.current = null;
-        }
-      } catch (error: any) {
-        if (error.name === 'AbortError') {
-          console.log('Header: Stats fetch timed out after 2s - using cached/fallback');
-        } else {
-          console.log('Header: Error fetching dual usage stats:', error);
-        }
-        
-        // Try to use cached data first
-        const cached = sessionStorage.getItem('header-stats');
-        if (cached) {
-          try {
-            setDualStats(JSON.parse(cached));
-            return;
-          } catch (e) {
-            console.log('Header: Cached data invalid');
-          }
-        }
-        
-        // Set minimal fallback stats to prevent UI blocking
-        setDualStats({
-          userType: 'anonymous',
-          stats: {
-            regular: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1000 } },
-            raw: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1000 } },
-            combined: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1000 } }
-          }
-        });
-      }
-    };
-
-    // Check for cached data first - instant load
-    const cached = sessionStorage.getItem('header-stats');
-    if (cached) {
-      try {
-        setDualStats(JSON.parse(cached));
-      } catch (e) {
-        console.log('Header: Invalid cached data');
-      }
-    }
-
-    // Non-blocking: Don't wait for stats to render the page
-    setTimeout(fetchDualStats, 500); // Increased delay to let page render completely first
-    
-    // Refresh every 60 seconds to reduce server load
-    const interval = setInterval(fetchDualStats, 60000); // Increased from 30s to 60s
-    
-    // Listen for manual refresh events from file operations with debounce
-    let refreshTimeout: NodeJS.Timeout;
-    const handleRefresh = () => {
-      console.log('🔄 Header: Refreshing counter after operation');
-      clearTimeout(refreshTimeout);
-      refreshTimeout = setTimeout(() => {
-        fetchDualStats();
-      }, 500); // Increased debounce
-    };
-    
-    window.addEventListener('refreshUniversalCounter', handleRefresh);
-    
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('refreshUniversalCounter', handleRefresh);
-    };
-  }, []);
 
   // Determine what type of operations to show based on current page
   const getPageType = () => {
@@ -133,149 +43,6 @@ export default function Header() {
     return 'both';
   };
 
-  // Sleek header counter component with dual usage tracking
-  const HeaderCounter = () => {
-    const stats = dualStats?.stats;
-    if (!stats) return null;
-
-    const pageType = getPageType();
-    
-    // For RAW conversion pages, show only RAW counter
-    if (pageType === 'raw') {
-      const displayStats = stats.raw;
-      if (!displayStats) return null;
-
-      return (
-        <div className="flex items-center gap-3 text-xs">
-          {/* Page type indicator */}
-          <div className="flex items-center gap-1">
-            <Camera className="w-3 h-3 text-purple-600" />
-            <span className="text-xs font-medium text-gray-600 capitalize">RAW</span>
-          </div>
-          
-          {/* Monthly */}
-          <div className="flex items-center gap-1" data-testid="header-monthly-counter">
-            <Calendar className="w-3 h-3 text-blue-600" />
-            <span className="font-medium text-brand-dark">{displayStats.monthly.used}/{displayStats.monthly.limit}</span>
-            <span className="text-gray-500">month</span>
-          </div>
-          
-          {/* Daily */}
-          <div className="flex items-center gap-1" data-testid="header-daily-counter">
-            <Activity className="w-3 h-3 text-green-600" />
-            <span className="font-medium text-brand-dark">{displayStats.daily.used}/{displayStats.daily.limit}</span>
-            <span className="text-gray-500">day</span>
-          </div>
-          
-          {/* Hourly */}
-          <div className="flex items-center gap-1" data-testid="header-hourly-counter">
-            <Clock className="w-3 h-3 text-orange-600" />
-            <span className="font-medium text-brand-dark">{displayStats.hourly.used}/{displayStats.hourly.limit}</span>
-            <span className="text-gray-500">hour</span>
-          </div>
-        </div>
-      );
-    }
-
-    // For regular format conversion pages, show only Regular counter
-    if (pageType === 'regular') {
-      const displayStats = stats.regular;
-      if (!displayStats) return null;
-
-      return (
-        <div className="flex items-center gap-3 text-xs">
-          {/* Page type indicator */}
-          <div className="flex items-center gap-1">
-            <Image className="w-3 h-3 text-blue-600" />
-            <span className="text-xs font-medium text-gray-600 capitalize">Regular</span>
-          </div>
-          
-          {/* Monthly */}
-          <div className="flex items-center gap-1" data-testid="header-monthly-counter">
-            <Calendar className="w-3 h-3 text-blue-600" />
-            <span className="font-medium text-brand-dark">{displayStats.monthly.used}/{displayStats.monthly.limit}</span>
-            <span className="text-gray-500">month</span>
-          </div>
-          
-          {/* Daily */}
-          <div className="flex items-center gap-1" data-testid="header-daily-counter">
-            <Activity className="w-3 h-3 text-green-600" />
-            <span className="font-medium text-brand-dark">{displayStats.daily.used}/{displayStats.daily.limit}</span>
-            <span className="text-gray-500">day</span>
-          </div>
-          
-          {/* Hourly */}
-          <div className="flex items-center gap-1" data-testid="header-hourly-counter">
-            <Clock className="w-3 h-3 text-orange-600" />
-            <span className="font-medium text-brand-dark">{displayStats.hourly.used}/{displayStats.hourly.limit}</span>
-            <span className="text-gray-500">hour</span>
-          </div>
-        </div>
-      );
-    }
-
-    // For main landing page, show both Regular and RAW in two rows
-    if (pageType === 'both') {
-      return (
-        <div className="flex flex-col gap-1 text-xs">
-          {/* Regular Operations Row */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1">
-              <Image className="w-3 h-3 text-blue-600" />
-              <span className="text-xs font-medium text-gray-600">Regular</span>
-            </div>
-            
-            <div className="flex items-center gap-1" data-testid="header-regular-monthly-counter">
-              <Calendar className="w-3 h-3 text-blue-600" />
-              <span className="font-medium text-brand-dark">{stats.regular.monthly.used}/{stats.regular.monthly.limit}</span>
-              <span className="text-gray-500">month</span>
-            </div>
-            
-            <div className="flex items-center gap-1" data-testid="header-regular-daily-counter">
-              <Activity className="w-3 h-3 text-green-600" />
-              <span className="font-medium text-brand-dark">{stats.regular.daily.used}/{stats.regular.daily.limit}</span>
-              <span className="text-gray-500">day</span>
-            </div>
-            
-            <div className="flex items-center gap-1" data-testid="header-regular-hourly-counter">
-              <Clock className="w-3 h-3 text-orange-600" />
-              <span className="font-medium text-brand-dark">{stats.regular.hourly.used}/{stats.regular.hourly.limit}</span>
-              <span className="text-gray-500">hour</span>
-            </div>
-          </div>
-
-          {/* RAW Operations Row */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1">
-              <Camera className="w-3 h-3 text-purple-600" />
-              <span className="text-xs font-medium text-gray-600">RAW</span>
-            </div>
-            
-            <div className="flex items-center gap-1" data-testid="header-raw-monthly-counter">
-              <Calendar className="w-3 h-3 text-blue-600" />
-              <span className="font-medium text-brand-dark">{stats.raw.monthly.used}/{stats.raw.monthly.limit}</span>
-              <span className="text-gray-500">month</span>
-            </div>
-            
-            <div className="flex items-center gap-1" data-testid="header-raw-daily-counter">
-              <Activity className="w-3 h-3 text-green-600" />
-              <span className="font-medium text-brand-dark">{stats.raw.daily.used}/{stats.raw.daily.limit}</span>
-              <span className="text-gray-500">day</span>
-            </div>
-            
-            <div className="flex items-center gap-1" data-testid="header-raw-hourly-counter">
-              <Clock className="w-3 h-3 text-orange-600" />
-              <span className="font-medium text-brand-dark">{stats.raw.hourly.used}/{stats.raw.hourly.limit}</span>
-              <span className="text-gray-500">hour</span>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    return null;
-  };
-
   return (
     <>
       {/* Mobile Header - Simplified approach */}
@@ -291,48 +58,6 @@ export default function Header() {
               <span className="text-lg font-bold font-poppins text-brand-dark">MicroJPEG</span>
               <span className="text-xs font-opensans text-brand-dark opacity-70 tracking-wider">PICTURE PERFECT</span>
             </div>
-          </div>
-          
-          {/* Mobile Usage Counter - Compact */}
-          <div className="flex items-center gap-2 text-xs">
-            {dualStats?.stats && (
-              <>
-                {(() => {
-                  const pageType = getPageType();
-                  
-                  // For CR2-to-PNG page, show only RAW
-                  if (pageType === 'raw') {
-                    const displayStats = dualStats.stats.raw;
-                    return (
-                      <div className="flex items-center gap-1" data-testid="mobile-monthly-counter">
-                        <Camera className="w-3 h-3 text-purple-600" />
-                        <span className="font-medium text-brand-dark text-xs">
-                          {displayStats.monthly.used}/{displayStats.monthly.limit}
-                        </span>
-                      </div>
-                    );
-                  }
-                  
-                  // For main landing page, show both (compact)
-                  if (pageType === 'both') {
-                    return (
-                      <div className="flex items-center gap-1" data-testid="mobile-both-counter">
-                        <Image className="w-3 h-3 text-blue-600" />
-                        <span className="font-medium text-brand-dark text-xs">
-                          {dualStats.stats.regular.monthly.used}/{dualStats.stats.regular.monthly.limit}
-                        </span>
-                        <Camera className="w-3 h-3 text-purple-600" />
-                        <span className="font-medium text-brand-dark text-xs">
-                          {dualStats.stats.raw.monthly.used}/{dualStats.stats.raw.monthly.limit}
-                        </span>
-                      </div>
-                    );
-                  }
-                  
-                  return null;
-                })()}
-              </>
-            )}
           </div>
           
           <button
@@ -380,9 +105,6 @@ export default function Header() {
               </button>
               
             </nav>
-
-            {/* Desktop Usage Counter */}
-            <HeaderCounter />
 
             {/* Desktop Auth Buttons */}
             <div className="hidden lg:flex items-center gap-2 lg:gap-4 flex-shrink-0">

@@ -10,6 +10,10 @@
     <link rel="preconnect" href="https://pagead2.googlesyndication.com">
     <link rel="preconnect" href="https://www.googletagmanager.com">
     
+    <!-- CRITICAL LCP: Preload hero background images with highest priority -->
+    <link rel="preload" href="/src/assets/background.webp" as="image" fetchpriority="high">
+    <link rel="preload" href="/src/assets/premium-background.webp" as="image" fetchpriority="high">
+    
     <!-- OPTIMIZED: Single combined font request to reduce network calls -->
     <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@400;500;600&family=Open+Sans:wght@400;500;600&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
     
@@ -90,17 +94,34 @@
     <link rel="dns-prefetch" href="//www.google-analytics.com">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@400;500;600&display=swap"></noscript>
     
-    <!-- OPTIMIZED: Lazy-loaded AdSense to prevent blocking -->
+    <!-- ULTRA OPTIMIZED: Heavily delayed ad loading to prevent performance impact -->
     <script>
-      // Lazy load ads after page is fully interactive
+      // Only load ads after page is fully interactive AND user shows engagement
+      let adLoadTimeout;
+      
+      const loadAds = () => {
+        const adsScript = document.createElement('script');
+        adsScript.async = true;
+        adsScript.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9368777119109420';
+        adsScript.crossOrigin = 'anonymous';
+        document.head.appendChild(adsScript);
+        console.log('Ads loaded after user engagement');
+      };
+      
+      const scheduleAdLoad = () => {
+        clearTimeout(adLoadTimeout);
+        adLoadTimeout = setTimeout(loadAds, 5000); // 5 seconds after engagement
+      };
+      
+      // Load ads only after page is complete AND user shows engagement
       window.addEventListener('load', () => {
-        setTimeout(() => {
-          const adsScript = document.createElement('script');
-          adsScript.async = true;
-          adsScript.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9368777119109420';
-          adsScript.crossOrigin = 'anonymous';
-          document.head.appendChild(adsScript);
-        }, 1000); // Load ads 1 second after page load
+        // Schedule initial load for 10 seconds after page load
+        adLoadTimeout = setTimeout(loadAds, 10000);
+        
+        // Or load immediately on user interaction
+        ['click', 'scroll', 'keydown', 'touchstart'].forEach(event => {
+          document.addEventListener(event, scheduleAdLoad, { once: true, passive: true });
+        });
       });
     </script>
      
