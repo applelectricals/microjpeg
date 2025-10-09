@@ -25,25 +25,6 @@ import { SEO_CONTENT, STRUCTURED_DATA } from '@/data/seoData';
 const AdSenseAd = lazy(() => import('@/components/AdSenseAd').then(m => ({ default: m.AdSenseAd })));
 const OurProducts = lazy(() => import('@/components/our-products'));
 
-// 🚀 CRITICAL: Replace heavy icon imports with simple CSS/Unicode alternatives
-const SimpleIcons = {
-  Crown: () => <span className="text-yellow-500">👑</span>,
-  Plus: () => <span className="font-bold text-lg">+</span>,
-  Minus: () => <span className="font-bold text-lg">−</span>,
-  Menu: () => <span className="text-lg">≡</span>,
-  Settings: () => <span>⚙️</span>,
-  Download: () => <span>⬇️</span>,
-  Zap: () => <span>⚡</span>,
-  Shield: () => <span>🛡️</span>,
-  Sparkles: () => <span>✨</span>,
-  ArrowRight: () => <span>→</span>,
-  ImageIcon: () => <span>🖼️</span>,
-  ChevronDown: () => <span>▼</span>,
-  Calendar: () => <span>📅</span>,
-  Activity: () => <span>📊</span>,
-  FileImage: () => <span>🖼️</span>
-};
-
 // Types
 interface FileWithPreview extends File {
   id: string;
@@ -1684,7 +1665,6 @@ export default function MicroJPEGLanding() {
                         onClick={downloadAllResults}
                         data-testid="button-download-all"
                       >
-                        <SimpleIcons.Download />
                         Download All
                       </Button>
                       
@@ -1747,7 +1727,7 @@ export default function MicroJPEGLanding() {
                         <div className="flex items-center justify-between mb-4">
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 bg-brand-teal/10 rounded-lg flex items-center justify-center">
-                              <SimpleIcons.Crown />
+                              <span className="text-xs">👑</span>
                             </div>
                             <div>
                               <h4 className="text-lg font-bold text-gray-900">Test Premium</h4>
@@ -2075,7 +2055,7 @@ export default function MicroJPEGLanding() {
                                       style={{ backgroundColor: formatInfo.color }}
                                       onClick={() => window.open(result.downloadUrl, '_blank')}
                                     >
-                                      <SimpleIcons.ImageIcon />
+                                      <span className="text-xs">📄</span>
                                       <span className="text-white text-xs font-bold">
                                         {(result.outputFormat || 'unknown').toUpperCase()}
                                       </span>
@@ -2145,21 +2125,21 @@ export default function MicroJPEGLanding() {
               <div className="grid md:grid-cols-3 gap-6 mb-8">
                 <div className="text-center">
                   <div className="w-12 h-12 bg-brand-teal/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <SimpleIcons.Zap />
+                    <span className="text-lg">⚡</span>
                   </div>
                   <h3 className="font-semibold text-brand-dark mb-2">300 Operations</h3>
                   <p className="text-sm text-gray-600">Test bulk processing power</p>
                 </div>
                 <div className="text-center">
                   <div className="w-12 h-12 bg-brand-gold/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <SimpleIcons.Crown />
+                    <span className="text-lg">👑</span>
                   </div>
                   <h3 className="font-semibold text-brand-dark mb-2">All Premium Features</h3>
                   <p className="text-sm text-gray-600">Advanced controls, no ads, API access</p>
                 </div>
                 <div className="text-center">
                   <div className="w-12 h-12 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <SimpleIcons.Shield />
+                    <span className="text-lg">🛡️</span>
                   </div>
                   <h3 className="font-semibold text-brand-dark mb-2">24-Hour Access</h3>
                   <p className="text-sm text-gray-600">No recurring charges</p>
@@ -2174,7 +2154,7 @@ export default function MicroJPEGLanding() {
                   data-testid="button-test-premium"
                 >
                   🚀 Test Premium for $1
-                  <SimpleIcons.ArrowRight />
+                  <span className="ml-2">→</span>
                 </Button>
                 <p className="text-xs text-gray-500 max-w-xs">
                   💳 Secure payment via Stripe • Cancel anytime • No subscription
@@ -2623,21 +2603,21 @@ export default function MicroJPEGLanding() {
               <div className="grid md:grid-cols-3 gap-6">
                 <div className="text-center">
                   <div className="w-12 h-12 bg-brand-teal/10 rounded-lg mx-auto mb-3 flex items-center justify-center">
-                    <SimpleIcons.Zap />
+                    <span className="text-lg">⚡</span>
                   </div>
                   <h4 className="font-semibold text-brand-dark mb-2">Lightning Fast</h4>
                   <p className="text-sm text-gray-600">Process images in seconds with our optimized servers</p>
                 </div>
                 <div className="text-center">
                   <div className="w-12 h-12 bg-brand-teal/10 rounded-lg mx-auto mb-3 flex items-center justify-center">
-                    <SimpleIcons.Shield />
+                    <span className="text-lg">🛡️</span>
                   </div>
                   <h4 className="font-semibold text-brand-dark mb-2">Secure & Reliable</h4>
                   <p className="text-sm text-gray-600">Your images are processed securely and never stored</p>
                 </div>
                 <div className="text-center">
                   <div className="w-12 h-12 bg-brand-teal/10 rounded-lg mx-auto mb-3 flex items-center justify-center">
-                    <SimpleIcons.Settings />
+                    <span className="text-lg">⚙️</span>
                   </div>
                   <h4 className="font-semibold text-brand-dark mb-2">Highly Customizable</h4>
                   <p className="text-sm text-gray-600">Fine-tune compression settings for your specific needs</p>
@@ -2671,11 +2651,11 @@ export default function MicroJPEGLanding() {
             {/* Risk Reversal */}
             <div className="flex justify-center items-center gap-8 text-sm opacity-90 text-black">
               <div className="flex items-center gap-2">
-                <SimpleIcons.Shield />
+                <span className="text-sm">🛡️</span>
                 <span>30-day money-back guarantee</span>
               </div>
               <div className="flex items-center gap-2">
-                <SimpleIcons.Zap />
+                <span className="text-sm">⚡</span>
                 <span>Setup in under 5 minutes</span>
               </div>
               <div className="flex items-center gap-2">
@@ -2734,9 +2714,9 @@ export default function MicroJPEGLanding() {
                         >
                           <span className="font-medium text-gray-200">{faq.question}</span>
                           {expandedQuestions.has(index) ? (
-                            <SimpleIcons.Minus />
+                            <span className="text-teal-400 text-lg">−</span>
                           ) : (
-                            <SimpleIcons.Plus />
+                            <span className="text-gray-400 text-lg">+</span>
                           )}
                         </button>
                         {expandedQuestions.has(index) && (
