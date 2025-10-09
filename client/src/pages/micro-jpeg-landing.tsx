@@ -369,6 +369,7 @@ export default function MicroJPEGLanding() {
   const [selectedFiles, setSelectedFiles] = useState<FileWithPreview[]>([]);
   const [newlyAddedFiles, setNewlyAddedFiles] = useState<FileWithPreview[]>([]);
   const [fileObjectUrls, setFileObjectUrls] = useState<Map<string, string>>(new Map());
+  const [cachedFileIds, setCachedFileIds] = useState<string[]>([]); // ✅ OPTIMIZATION: Store cached file IDs
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingProgress, setProcessingProgress] = useState(0);
   const [processingStatus, setProcessingStatus] = useState('');
@@ -786,6 +787,12 @@ export default function MicroJPEGLanding() {
         console.log(`Recorded ${operationCount} operations for ${data.results.length} files processed`);
       }
 
+      // ✅ OPTIMIZATION: Store cached file IDs for future format conversions
+      if (data.cachedFileIds && Array.isArray(data.cachedFileIds)) {
+        setCachedFileIds(data.cachedFileIds);
+        console.log(`📁 Stored ${data.cachedFileIds.length} cached file IDs for future conversions`);
+      }
+
       // Get the latest session data to ensure we don't lose any previous results
       const latestSession = sessionManager.getSession();
       
@@ -990,9 +997,6 @@ export default function MicroJPEGLanding() {
     setProcessingStatus(`Converting to ${format.toUpperCase()}...`);
 
     try {
-      // Prepare FormData for the API
-      const formData = new FormData();
-      
       // Get fresh session data to check existing results
       const currentSession = sessionManager.getSession();
       
@@ -1010,28 +1014,54 @@ export default function MicroJPEGLanding() {
         setIsProcessing(false);
         return;
       }
-      
-      filesToProcess.forEach((file) => {
-        formData.append('files', file as File);
-      });
-
-      // Prepare compression settings for specific format
-      const settings = {
-        quality: 80,
-        outputFormat: [format], // Only process this specific format
-        resizeOption: 'keep-original',
-        compressionAlgorithm: 'standard',
-      };
-
-      formData.append('settings', JSON.stringify(settings));
 
       setProcessingProgress(20);
-      setProcessingStatus(`Processing ${format.toUpperCase()}...`);
+      setProcessingStatus(`Converting to ${format.toUpperCase()}...`);
 
-      const response = await fetch('/api/compress', {
-        method: 'POST',
-        body: formData,
-      });
+      let response;
+
+      // Use cached conversion if we have cached file IDs
+      if (cachedFileIds && cachedFileIds.length > 0) {
+        // Use cached conversion API
+        const cachedConversionData = {
+          cachedFileIds,
+          outputFormat: format,
+          settings: {
+            quality: 80,
+            resizeOption: 'keep-original',
+            compressionAlgorithm: 'standard',
+          }
+        };
+
+        response = await fetch('/api/convert-cached', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(cachedConversionData),
+        });
+      } else {
+        // Fallback to traditional upload if no cached files
+        const formData = new FormData();
+        
+        filesToProcess.forEach((file) => {
+          formData.append('files', file as File);
+        });
+
+        const settings = {
+          quality: 80,
+          outputFormat: [format],
+          resizeOption: 'keep-original',
+          compressionAlgorithm: 'standard',
+        };
+
+        formData.append('settings', JSON.stringify(settings));
+
+        response = await fetch('/api/compress', {
+          method: 'POST',
+          body: formData,
+        });
+      }
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
