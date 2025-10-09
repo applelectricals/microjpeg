@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Menu, X, Activity, Clock, Calendar, Image, Camera } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
-import logoUrl from '@assets/mascot-logo-optimized.png';
+import mascotLogoSmall from '@assets/mascot-logo-small';
 import { FORMATS } from '@/data/conversionMatrix';
 
 export default function Header() {
@@ -15,15 +15,22 @@ export default function Header() {
   const optimisticCounterRef = useRef<{monthly: number, daily: number, hourly: number} | null>(null);
 
 
-  // Fetch dual usage statistics for header display
+  // Fetch dual usage statistics for header display - OPTIMIZED for performance
   useEffect(() => {
     const fetchDualStats = async () => {
       try {
+        // Add timeout to prevent hanging
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+        
         const response = await fetch('/api/universal-usage-stats', {
           method: 'GET',
           credentials: 'include',
-          cache: 'no-store', // Force fresh data every time
+          cache: 'default', // Allow caching for performance
+          signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
         
         if (response.ok) {
           const data = await response.json();
@@ -32,11 +39,26 @@ export default function Header() {
           optimisticCounterRef.current = null;
         }
       } catch (error) {
-        console.log('Header: Error fetching dual usage stats:', error);
+        if (error.name === 'AbortError') {
+          console.log('Header: Stats fetch timed out - using fallback');
+        } else {
+          console.log('Header: Error fetching dual usage stats:', error);
+        }
+        
+        // Set fallback stats to prevent UI blocking
+        setDualStats({
+          userType: 'anonymous',
+          stats: {
+            regular: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1000 } },
+            raw: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1000 } },
+            combined: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1000 } }
+          }
+        });
       }
     };
 
-    fetchDualStats();
+    // Non-blocking: Don't wait for stats to render the page
+    setTimeout(fetchDualStats, 100); // Defer by 100ms to let page render first
     
     // Refresh every 30 seconds for updates
     const interval = setInterval(fetchDualStats, 30000);
@@ -239,7 +261,7 @@ export default function Header() {
         <div className="flex items-center justify-between h-16 px-4">
           <div className="flex items-center gap-2">
             <img 
-              src={logoUrl} 
+              src={mascotLogoSmall} 
               alt="MicroJPEG Logo" 
               className="w-8 h-8 object-contain"
             />
@@ -307,7 +329,7 @@ export default function Header() {
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-              <img src={logoUrl} alt="MicroJPEG Logo" className="w-8 h-8 sm:w-[45px] sm:h-[45px]" />
+              <img src={mascotLogoSmall} alt="MicroJPEG Logo" className="w-8 h-8 sm:w-[45px] sm:h-[45px]" fetchpriority="high" />
               <div className="flex flex-col">
                 <span className="text-lg sm:text-2xl font-bold font-poppins text-brand-dark whitespace-nowrap">MicroJPEG</span>
                 <span className="text-xs font-opensans text-brand-dark/70 tracking-widest whitespace-nowrap">PICTURE PERFECT</span>
