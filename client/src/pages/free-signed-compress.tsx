@@ -17,8 +17,10 @@ import { getUsageStats, canCompress, canConvert, recordCompression, recordConver
 import Header from '@/components/header';
 import { SEOHead } from '@/components/SEOHead';
 import avifIcon from '@/assets/format-icons/avif.jpg';
-import jpegIcon from '@/assets/format-icons/jpeg.jpg';
-import pngIcon from '@/assets/format-icons/png.jpg';
+// Format icons replaced with lightweight Lucide icons
+import { getFormatIcon } from '@/utils/formatIcons';
+// import jpegIcon from '@/assets/format-icons/jpeg.jpg'; // Removed large file
+// import pngIcon from '@/assets/format-icons/png.jpg';   // Removed large file
 import webpIcon from '@/assets/format-icons/webp.jpg';
 // Critical images only (loaded immediately)
 import logoUrl from '@assets/mascot-logo-optimized.png';
@@ -41,8 +43,8 @@ const OurProducts = lazy(() => import('@/components/our-products'));
 const loadFormatIcon = (format: string) => {
   switch (format) {
     case 'avif': return import('@/assets/format-icons/avif.jpg').then(m => m.default);
-    case 'jpeg': return import('@/assets/format-icons/jpeg.jpg').then(m => m.default);
-    case 'png': return import('@/assets/format-icons/png.jpg').then(m => m.default);
+    // case 'jpeg': return import('@/assets/format-icons/jpeg.jpg').then(m => m.default); // Removed large file
+    // case 'png': return import('@/assets/format-icons/png.jpg').then(m => m.default);   // Removed large file
     case 'webp': return import('@/assets/format-icons/webp.jpg').then(m => m.default);
     default: return Promise.resolve('');
   }

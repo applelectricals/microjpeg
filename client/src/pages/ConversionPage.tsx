@@ -25,8 +25,10 @@ import {
 
 // Import format icons
 import avifIcon from '@/assets/format-icons/avif.jpg';
-import jpegIcon from '@/assets/format-icons/jpeg.jpg';
-import pngIcon from '@/assets/format-icons/png.jpg';
+// Format icons replaced with lightweight Lucide icons
+import { getFormatIcon } from '@/utils/formatIcons';
+// import jpegIcon from '@/assets/format-icons/jpeg.jpg'; // Removed large file
+// import pngIcon from '@/assets/format-icons/png.jpg';   // Removed large file
 import webpIcon from '@/assets/format-icons/webp.jpg';
 
 // Types

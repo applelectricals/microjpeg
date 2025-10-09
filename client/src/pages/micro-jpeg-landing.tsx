@@ -392,46 +392,9 @@ export default function MicroJPEGLanding() {
   const { toast } = useToast();
   const { checkOperation } = useOperationCheck();
 
-  // File validation function - now inside component to access checkOperation hook
+  // File validation function - Local validation based on page privileges (no API calls needed)
   const validateFile = useCallback(async (file: File, isUserAuthenticated: boolean = false): Promise<string | null> => {
-    // PROACTIVE HOURLY LIMIT CHECK - Show friendly warning before upload
-    try {
-      const response = await fetch('/api/universal-usage-stats', {
-        method: 'GET',
-        credentials: 'include',
-        cache: 'no-store', // Force fresh data every time
-      });
-      
-      if (response.ok) {
-        const stats = await response.json();
-        const { hourlyUsed = 0, hourlyLimit = 5 } = stats.operations || {};
-        
-        // Check if this file would exceed hourly limit
-        if (hourlyUsed >= hourlyLimit) {
-          const timeToReset = new Date(Date.now() + 60*60*1000).toLocaleTimeString('en-US', { 
-            hour: '2-digit', 
-            minute: '2-digit'
-          });
-          return `⏰ You've reached your hourly limit of ${hourlyLimit} operations. Please try again after ${timeToReset}, or upgrade for unlimited access!`;
-        }
-        
-        // Show friendly warning when approaching limit (80% threshold)
-        if (hourlyUsed >= Math.floor(hourlyLimit * 0.8)) {
-          const remaining = hourlyLimit - hourlyUsed;
-          console.log(`💡 Approaching hourly limit: ${remaining} operations remaining`);
-        }
-      }
-    } catch (error) {
-      console.log('Could not check hourly limits:', error);
-      // Continue with validation if limit check fails
-    }
-    
-    // Check usage limits using the new backend operation checking system
-    const operationCheck = await checkOperation(file, PAGE_IDENTIFIER);
-    if (!operationCheck.allowed) {
-      return operationCheck.reason || 'Operation not allowed';
-    }
-
+    // Local file format validation
     const fileExtension = file.name.toLowerCase().split('.').pop();
     const isRawFormat = ['.cr2', '.arw', '.dng', '.nef', '.orf', '.rw2'].some(ext => file.name.toLowerCase().endsWith(ext));
     
@@ -440,12 +403,15 @@ export default function MicroJPEGLanding() {
     }
     
     // Landing page enforces 10MB limit for all users (free tier page)
+    // No need for API call - this is a static limit based on page type
     if (file.size > SESSION_LIMITS.free.maxFileSize) {
       return `${file.name}: File too large. Maximum size is 10MB on this page.`;
     }
     
+    // Page-based validation: Free landing page has specific limits
+    // For rate limiting, rely on backend processing rather than pre-upload API calls
     return null;
-  }, [checkOperation]);
+  }, []);
   
   // Lead magnet state
   const [leadMagnetEmail, setLeadMagnetEmail] = useState('');

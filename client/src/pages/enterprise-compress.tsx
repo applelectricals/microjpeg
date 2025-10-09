@@ -16,8 +16,10 @@ import { SEOHead } from '@/components/SEOHead';
 import logoUrl from '@assets/mascot-logo-optimized.png';
 import mascotUrl from '@/assets/mascot.webp';
 import avifIcon from '@/assets/format-icons/avif.jpg';
-import jpegIcon from '@/assets/format-icons/jpeg.jpg';
-import pngIcon from '@/assets/format-icons/png.jpg';
+// Format icons replaced with lightweight Lucide icons
+import { getFormatIcon } from '@/utils/formatIcons';
+// import jpegIcon from '@/assets/format-icons/jpeg.jpg'; // Removed large file
+// import pngIcon from '@/assets/format-icons/png.jpg';   // Removed large file
 import webpIcon from '@/assets/format-icons/webp.jpg';
 import betaUser1 from '@assets/01_1756987891168.webp';
 import betaUser2 from '@assets/06_1756987891169.webp';
