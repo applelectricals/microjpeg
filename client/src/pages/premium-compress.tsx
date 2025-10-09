@@ -14,7 +14,7 @@ import { useAuth, useSubscription } from '@/hooks/useAuth';
 import { sessionManager } from '@/lib/sessionManager';
 import Header from '@/components/header';
 import { SEOHead } from '@/components/SEOHead';
-import logoUrl from '@assets/mascot-logo-optimized.png';
+import logoUrl from '@assets/Header_Logo20KB.svg';
 import mascotUrl from '@/assets/mascot.webp';
 import avifIcon from '@/assets/format-icons/avif.jpg';
 // Format icons replaced with lightweight Lucide icons

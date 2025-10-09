@@ -1,6 +1,6 @@
 // Dynamic imports for images to enable code splitting
 export const loadMascotImages = {
-  logo: () => import('@assets/mascot-logo-optimized.png').then(m => m.default),
+  logo: () => import('@assets/Header_Logo20KB.svg').then(m => m.default),
   mascot: () => import('@/assets/mascot.webp').then(m => m.default),
   owl01: () => import('@assets/owl-mascot-01.webp').then(m => m.default),
   owl02: () => import('@assets/owl-mascot-02.webp').then(m => m.default),

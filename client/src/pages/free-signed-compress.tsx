@@ -23,7 +23,7 @@ import { getFormatIcon } from '@/utils/formatIcons';
 // import pngIcon from '@/assets/format-icons/png.jpg';   // Removed large file
 import webpIcon from '@/assets/format-icons/webp.jpg';
 // Critical images only (loaded immediately)
-import logoUrl from '@assets/mascot-logo-optimized.png';
+import logoUrl from '@assets/Header_Logo20KB.svg';
 import mascotUrl from '@/assets/mascot.webp';
 import freeSignedBg from '@/assets/background.webp';
 import owlMascot01 from '@assets/owl-mascot-01.webp';

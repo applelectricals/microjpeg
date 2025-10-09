@@ -1,4 +1,4 @@
-import logoUrl from "@assets/mascot-logo-optimized.png";
+import logoUrl from "@assets/Header_Logo20KB.svg";
 
 export default function Footer() {
   return (

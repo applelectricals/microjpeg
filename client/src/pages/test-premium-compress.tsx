@@ -14,7 +14,7 @@ import { useUsageStats } from '@/hooks/useUsageStats';
 import { Dropbox } from 'dropbox';
 import { canOperateHourly, recordCompression, getUsageStats } from '@/lib/usageTracker';
 import Header from '@/components/header';
-import logoUrl from '@assets/mascot-logo-optimized.png';
+import logoUrl from '@assets/Header_Logo20KB.svg';
 import mascotUrl from '@/assets/mascot.webp';
 import avifIcon from '@/assets/format-icons/avif.jpg';
 // Format icons replaced with lightweight Lucide icons
