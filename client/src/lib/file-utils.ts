@@ -1,5 +1,3 @@
-// Removed UniversalUsageTracker - using DualCounter only
-
 const FREE_USER_MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB for free users
 const PREPAID_USER_MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB for prepaid users
 

@@ -10,7 +10,6 @@ import { Switch } from '@/components/ui/switch';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, useSubscription } from '@/hooks/useAuth';
-// Removed redundant usage trackers - using DualCounter only
 import { sessionManager } from '@/lib/sessionManager';
 import Header from '@/components/header';
 import { SEOHead } from '@/components/SEOHead';

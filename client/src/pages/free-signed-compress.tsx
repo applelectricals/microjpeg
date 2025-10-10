@@ -13,7 +13,6 @@ import { useAuth } from '@/hooks/useAuth';
 import { useUsageStats } from '@/hooks/useUsageStats';
 import { apiRequest } from '@/lib/queryClient';
 import { getUsageStats, canCompress, canConvert, recordCompression, recordConversion, isConversionRequest, canOperateHourly } from '@/lib/usageTracker';
-// Removed redundant usage trackers - using DualCounter only
 import Header from '@/components/header';
 import { SEOHead } from '@/components/SEOHead';
 import avifIcon from '@/assets/format-icons/avif.jpg';

@@ -447,11 +447,6 @@ export default function ConversionPage() {
         setShowPricingCards(true);
       }
 
-      // Force counter refresh after successful conversion
-      setTimeout(() => {
-        window.dispatchEvent(new Event('refreshUniversalCounter'));
-      }, 500);
-
     } catch (error) {
       console.error('Conversion error:', error);
       toast({
@@ -463,9 +458,6 @@ export default function ConversionPage() {
     } finally {
       setIsProcessing(false);
       setProcessingFileIds(new Set());
-      
-      // Refresh counter after operation
-      window.dispatchEvent(new Event('refreshUniversalCounter'));
     }
   }, [selectedFiles, consecutiveUploads, toast, conversionConfig, fromFormat, urlParams, qualityPercent, sizePercent]);
 
