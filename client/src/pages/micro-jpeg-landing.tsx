@@ -2588,7 +2588,9 @@ export default function MicroJPEGLanding() {
       </section>
 
       {/* Our Products Section */}
-      <OurProducts />
+      <Suspense fallback={<div className="py-16 flex justify-center"><div className="animate-pulse">Loading...</div></div>}>
+        <OurProducts />
+      </Suspense>
 
       {/* Final Conversion Section - Bottom of Funnel */}
       <section className="py-16 bg-gradient-to-r from-brand-teal to-brand-teal-dark text-black relative overflow-hidden">
