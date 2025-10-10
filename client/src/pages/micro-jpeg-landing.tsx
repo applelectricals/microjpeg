@@ -405,38 +405,6 @@ export default function MicroJPEGLanding() {
 
   // File validation function - now inside component to access checkOperation hook
   const validateFile = useCallback(async (file: File, isUserAuthenticated: boolean = false): Promise<string | null> => {
-    // PROACTIVE HOURLY LIMIT CHECK - Show friendly warning before upload
-    try {
-      const response = await fetch('/api/universal-usage-stats', {
-        method: 'GET',
-        credentials: 'include',
-        cache: 'no-store', // Force fresh data every time
-      });
-      
-      if (response.ok) {
-        const stats = await response.json();
-        const { hourlyUsed = 0, hourlyLimit = 5 } = stats.operations || {};
-        
-        // Check if this file would exceed hourly limit
-        if (hourlyUsed >= hourlyLimit) {
-          const timeToReset = new Date(Date.now() + 60*60*1000).toLocaleTimeString('en-US', { 
-            hour: '2-digit', 
-            minute: '2-digit'
-          });
-          return `⏰ You've reached your hourly limit of ${hourlyLimit} operations. Please try again after ${timeToReset}, or upgrade for unlimited access!`;
-        }
-        
-        // Show friendly warning when approaching limit (80% threshold)
-        if (hourlyUsed >= Math.floor(hourlyLimit * 0.8)) {
-          const remaining = hourlyLimit - hourlyUsed;
-          console.log(`💡 Approaching hourly limit: ${remaining} operations remaining`);
-        }
-      }
-    } catch (error) {
-      console.log('Could not check hourly limits:', error);
-      // Continue with validation if limit check fails
-    }
-    
     // Check usage limits using the new backend operation checking system
     const operationCheck = await checkOperation(file, PAGE_IDENTIFIER);
     if (!operationCheck.allowed) {
@@ -1178,15 +1146,11 @@ export default function MicroJPEGLanding() {
       return;
     }
 
-    // Process files async to handle server-side validation and hourly limits
+    // Process files async to handle server-side validation
     for (const file of fileArray) {
       const error = await validateFile(file, !!user);
       if (error) {
         errors.push(error);
-        // Stop processing more files if hourly limit is reached
-        if (error.includes('hourly limit')) {
-          break;
-        }
       } else {
         // Check for duplicates - prevent uploading files already in selectedFiles or results
         const isDuplicate = selectedFiles.some(
@@ -1205,14 +1169,11 @@ export default function MicroJPEGLanding() {
     }
 
     if (errors.length > 0) {
-      // Check if it's a hourly limit error for friendly messaging
-      const hasHourlyLimitError = errors.some(error => error.includes('hourly limit'));
-      
       toast({
-        title: hasHourlyLimitError ? "⏰ Hourly Limit Reached" : "File validation errors",
+        title: "File validation errors",
         description: errors.join('\n'),
-        variant: hasHourlyLimitError ? "default" : "destructive",
-        duration: hasHourlyLimitError ? 8000 : 5000, // Longer duration for limit messages
+        variant: "destructive",
+        duration: 5000,
       });
     }
 

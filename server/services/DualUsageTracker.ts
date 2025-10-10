@@ -121,14 +121,6 @@ export class DualUsageTracker {
 
       // Check limits based on file type
       if (fileType === 'raw') {
-        if (usage.rawHourly >= limits.hourly) {
-          return { 
-            allowed: false, 
-            reason: `Hourly RAW limit reached (${limits.hourly}). Try again in ${Math.ceil((new Date(usage.hourlyResetAt).getTime() - Date.now()) / 60000)} minutes.`,
-            usage,
-            limits
-          };
-        }
         if (usage.rawDaily >= limits.daily) {
           return { 
             allowed: false, 
@@ -146,14 +138,6 @@ export class DualUsageTracker {
           };
         }
       } else {
-        if (usage.regularHourly >= limits.hourly) {
-          return { 
-            allowed: false, 
-            reason: `Hourly limit reached (${limits.hourly}). Try again in ${Math.ceil((new Date(usage.hourlyResetAt).getTime() - Date.now()) / 60000)} minutes.`,
-            usage,
-            limits
-          };
-        }
         if (usage.regularDaily >= limits.daily) {
           return { 
             allowed: false, 
