@@ -19,7 +19,7 @@ import { DualCounter } from '@/components/DualCounter';
 import { useOperationCheck } from '@/hooks/useOperationCheck';
 import { SEOHead } from '@/components/SEOHead';
 import { SEO_CONTENT, STRUCTURED_DATA } from '@/data/seoData';
-import logoUrl from '@assets/mascot-logo-optimized.png';
+import { default as logoUrl } from '@/assets/mascot-logo-small.ts';
 import mascotUrl from '@/assets/mascot.webp';
 import avifIcon from '@/assets/format-icons/avif.jpg';
 import jpegIcon from '@/assets/format-icons/jpeg.jpg';
