@@ -355,7 +355,6 @@ export default function MicroJPEGLanding() {
   useEffect(() => {
     const currentSession = sessionManager.getSession();
     if (currentSession.results.length !== session.results.length) {
-      console.log('Syncing session state - SessionManager has', currentSession.results.length, 'results, component has', session.results.length);
       setSession(currentSession);
     }
   }, [session.results.length]);
@@ -480,7 +479,6 @@ export default function MicroJPEGLanding() {
         throw new Error(data.message || 'Failed to send guide');
       }
     } catch (error) {
-      console.error('Lead magnet error:', error);
       toast({
         title: "Something went wrong",
         description: "Please try again in a moment.",
@@ -614,7 +612,7 @@ export default function MicroJPEGLanding() {
         });
       }
     } catch (error) {
-      console.log('Loyalty share tracking failed:', error);
+      // Loyalty share tracking failed
     }
   };
 
@@ -674,7 +672,6 @@ export default function MicroJPEGLanding() {
 
     // ✅ FIXED: Use server-side tracking instead of local sessionStorage
     // Local sessionStorage was out of sync - server handles all limit checking
-    console.log('🔧 Skipping local storage checks - using server-side tracking');
     
     // Also check conversion limits if format conversion is enabled
     if (conversionEnabled && selectedFormats.length > 0) {
@@ -777,20 +774,15 @@ export default function MicroJPEGLanding() {
         
         // Usage stats are now automatically refreshed by header counter
         
-        console.log(`Recorded ${operationCount} operations for ${data.results.length} files processed`);
       }
 
       // ✅ OPTIMIZATION: Store cached file IDs for future format conversions
       if (data.cachedFileIds && Array.isArray(data.cachedFileIds)) {
         setCachedFileIds(data.cachedFileIds);
-        console.log(`📁 Stored ${data.cachedFileIds.length} cached file IDs for future conversions`);
       }
 
       // Get the latest session data to ensure we don't lose any previous results
       const latestSession = sessionManager.getSession();
-      
-      console.log('startProcessing - Before updating session - existing results:', latestSession.results.length);
-      console.log('startProcessing - New results to add:', data.results?.length || 0);
       
       // Update session with results (accumulate with existing results)
       const newSession: SessionData = {
@@ -798,14 +790,11 @@ export default function MicroJPEGLanding() {
         results: [...latestSession.results, ...(data.results || [])],
         batchDownloadUrl: data.batchDownloadUrl,
       };
-      
-      console.log('startProcessing - After merging - total results:', newSession.results.length);
 
       setSession(newSession);
       sessionManager.updateSession(newSession);
 
       // Compression completed successfully
-      console.log('✅ Compression completed');
 
       // Usage stats tracking (backend only - no UI counters)
       setProcessingProgress(100);
@@ -827,7 +816,6 @@ export default function MicroJPEGLanding() {
       }
 
     } catch (error) {
-      console.error('Compression error:', error);
       // Clear progress interval on error
       if (progressInterval) {
         clearInterval(progressInterval);
@@ -843,7 +831,6 @@ export default function MicroJPEGLanding() {
       setShowModal(false);
       
       // Operation failed - continuing without counter dependencies
-      console.log('❌ Operation failed');
       
       // Don't clear selected files - keep them for thumbnails and format conversions
       // Clear newly added files to prevent reprocessing
@@ -853,7 +840,6 @@ export default function MicroJPEGLanding() {
 
   // ✅ NEW: Upload Complete trigger - launches modal immediately on successful upload
   const UploadComplete = useCallback(() => {
-    console.log('🚀 UploadComplete triggered - showing modal immediately');
     
     // 1. Modal Component Render (at the top of sequence)
     setShowModal(true);
@@ -913,7 +899,6 @@ export default function MicroJPEGLanding() {
       });
 
     } catch (error) {
-      console.error('Download all error:', error);
       toast({
         title: "Download failed",
         description: error instanceof Error ? error.message : "Failed to create download",
@@ -995,7 +980,6 @@ export default function MicroJPEGLanding() {
       
       // If no files need processing for this format, skip
       if (filesToProcess.length === 0) {
-        console.log(`All files already have ${format.toUpperCase()} results, skipping processing`);
         setIsProcessing(false);
         return;
       }
@@ -1071,14 +1055,10 @@ export default function MicroJPEGLanding() {
         // No additional frontend recording needed
         
         // Operation completed successfully
-        console.log(`✅ Recorded ${operationCount} operations for ${data.results.length} files converted to ${format}`);
       }
 
       // Get the latest session data to ensure we don't lose any previous results
       const latestSession = sessionManager.getSession();
-      
-      console.log('processSpecificFormat - Before updating session - existing results:', latestSession.results.length);
-      console.log('processSpecificFormat - New results to add:', data.results?.length || 0);
       
       // Update session with new results (append to existing results)
       const updatedSession = sessionManager.updateSession({
@@ -1087,7 +1067,6 @@ export default function MicroJPEGLanding() {
         compressions: latestSession.compressions + data.results.length,
       });
       
-      console.log('processSpecificFormat - After merging - total results:', updatedSession.results.length);
       setSession(updatedSession);
 
       // Usage stats are now automatically refreshed by header counter
@@ -1103,7 +1082,6 @@ export default function MicroJPEGLanding() {
       setNewlyAddedFiles([]);
 
     } catch (error) {
-      console.error('Format conversion error:', error);
       toast({
         title: "Conversion failed",
         description: error instanceof Error ? error.message : "An error occurred during format conversion",
