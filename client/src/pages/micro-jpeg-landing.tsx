@@ -1,7 +1,5 @@
 import { useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react';
-// 🚀 CRITICAL PERFORMANCE: Lucide React is 759kB! Replace with minimal icons
-// Only import absolute essentials - avoid the massive lucide-react bundle
-import { Upload, X, Check } from 'lucide-react';
+import { Upload, Settings, Download, Zap, Shield, Sparkles, X, Check, ArrowRight, ImageIcon, ChevronDown, Crown, Plus, Minus, Menu, Calendar, Activity } from 'lucide-react';
 import { SiWordpress } from 'react-icons/si';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -13,15 +11,26 @@ import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { apiRequest } from '@/lib/queryClient';
-// Removed redundant usage trackers and counters - focusing on core compression functionality
+// Removed redundant usage trackers - using DualCounter only
 import { sessionManager } from '@/lib/sessionManager';
 import { canConvert, recordCompression } from '@/lib/usageTracker';
 import Header from '@/components/header';
+import { DualCounter } from '@/components/DualCounter';
 import { useOperationCheck } from '@/hooks/useOperationCheck';
 import { SEOHead } from '@/components/SEOHead';
 import { SEO_CONTENT, STRUCTURED_DATA } from '@/data/seoData';
-
-// 🚀 PERFORMANCE: Lazy load heavy components for better initial load
+import logoUrl from '@assets/mascot-logo-optimized.png';
+import mascotUrl from '@/assets/mascot.webp';
+import avifIcon from '@/assets/format-icons/avif.jpg';
+import jpegIcon from '@/assets/format-icons/jpeg.jpg';
+import pngIcon from '@/assets/format-icons/png.jpg';
+import webpIcon from '@/assets/format-icons/webp.jpg';
+import betaUser1 from '@assets/01_1756987891168.webp';
+import betaUser2 from '@assets/06_1756987891169.webp';
+import betaUser3 from '@assets/07_1756987891169.webp';
+import owlMascot01 from '@assets/owl-mascot-01.webp';
+import owlMascot02 from '@assets/owl-mascot-02.webp';
+// Lazy load heavy components for better performance
 const AdSenseAd = lazy(() => import('@/components/AdSenseAd').then(m => ({ default: m.AdSenseAd })));
 const OurProducts = lazy(() => import('@/components/our-products'));
 
@@ -235,33 +244,33 @@ const groupResultsByOriginalName = (results: CompressionResult[]) => {
 
 // Helper function to get format-specific styling
 const getFormatInfo = (format: string) => {
-  const formatMap: Record<string, { icon: null; color: string; bgColor: string; textColor: string }> = {
+  const formatMap: Record<string, { icon: string; color: string; bgColor: string; textColor: string }> = {
     'avif': { 
-      icon: null, 
+      icon: avifIcon, 
       color: '#F59E0B', // Yellow/orange
       bgColor: '#FEF3C7', 
       textColor: '#92400E' 
     },
     'jpeg': { 
-      icon: null, 
+      icon: jpegIcon, 
       color: '#10B981', // Green
       bgColor: '#D1FAE5', 
       textColor: '#065F46' 
     },
     'jpg': { 
-      icon: null, 
+      icon: jpegIcon, 
       color: '#10B981', // Green
       bgColor: '#D1FAE5', 
       textColor: '#065F46' 
     },
     'png': { 
-      icon: null, 
+      icon: pngIcon, 
       color: '#3B82F6', // Blue
       bgColor: '#DBEAFE', 
       textColor: '#1E40AF' 
     },
     'webp': { 
-      icon: null, 
+      icon: webpIcon, 
       color: '#F97316', // Orange
       bgColor: '#FED7AA', 
       textColor: '#EA580C' 
@@ -269,7 +278,7 @@ const getFormatInfo = (format: string) => {
   };
   
   return formatMap[format] || {
-    icon: null,
+    icon: jpegIcon,
     color: '#6B7280',
     bgColor: '#F3F4F6',
     textColor: '#374151'
@@ -341,7 +350,16 @@ const isConversionRequest = (originalFormat: string, targetFormat: string): bool
 export default function MicroJPEGLanding() {
   const { isAuthenticated, user } = useAuth();
 
-  // Simplified tracking - no counter dependencies
+  // Create helper functions for instant counter updates
+  const updateCounterOptimistically = (increment: number = 1) => {
+    console.log('🚀 Triggering optimistic counter update');
+    window.dispatchEvent(new CustomEvent('optimisticCounterUpdate', { detail: { increment } }));
+  };
+
+  const refreshUniversalCounter = () => {
+    console.log('🔄 Triggering universal counter refresh');
+    window.dispatchEvent(new Event('refreshUniversalCounter'));
+  };
   
   // Use server usage data instead of local session data
   const [session, setSession] = useState<SessionData>(() => {
@@ -355,13 +373,13 @@ export default function MicroJPEGLanding() {
   useEffect(() => {
     const currentSession = sessionManager.getSession();
     if (currentSession.results.length !== session.results.length) {
+      console.log('Syncing session state - SessionManager has', currentSession.results.length, 'results, component has', session.results.length);
       setSession(currentSession);
     }
   }, [session.results.length]);
   const [selectedFiles, setSelectedFiles] = useState<FileWithPreview[]>([]);
   const [newlyAddedFiles, setNewlyAddedFiles] = useState<FileWithPreview[]>([]);
   const [fileObjectUrls, setFileObjectUrls] = useState<Map<string, string>>(new Map());
-  const [cachedFileIds, setCachedFileIds] = useState<string[]>([]); // ✅ OPTIMIZATION: Store cached file IDs
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingProgress, setProcessingProgress] = useState(0);
   const [processingStatus, setProcessingStatus] = useState('');
@@ -385,9 +403,46 @@ export default function MicroJPEGLanding() {
   const { toast } = useToast();
   const { checkOperation } = useOperationCheck();
 
-  // File validation function - Local validation based on page privileges (no API calls needed)
+  // File validation function - now inside component to access checkOperation hook
   const validateFile = useCallback(async (file: File, isUserAuthenticated: boolean = false): Promise<string | null> => {
-    // Local file format validation
+    // PROACTIVE HOURLY LIMIT CHECK - Show friendly warning before upload
+    try {
+      const response = await fetch('/api/universal-usage-stats', {
+        method: 'GET',
+        credentials: 'include',
+        cache: 'no-store', // Force fresh data every time
+      });
+      
+      if (response.ok) {
+        const stats = await response.json();
+        const { hourlyUsed = 0, hourlyLimit = 5 } = stats.operations || {};
+        
+        // Check if this file would exceed hourly limit
+        if (hourlyUsed >= hourlyLimit) {
+          const timeToReset = new Date(Date.now() + 60*60*1000).toLocaleTimeString('en-US', { 
+            hour: '2-digit', 
+            minute: '2-digit'
+          });
+          return `⏰ You've reached your hourly limit of ${hourlyLimit} operations. Please try again after ${timeToReset}, or upgrade for unlimited access!`;
+        }
+        
+        // Show friendly warning when approaching limit (80% threshold)
+        if (hourlyUsed >= Math.floor(hourlyLimit * 0.8)) {
+          const remaining = hourlyLimit - hourlyUsed;
+          console.log(`💡 Approaching hourly limit: ${remaining} operations remaining`);
+        }
+      }
+    } catch (error) {
+      console.log('Could not check hourly limits:', error);
+      // Continue with validation if limit check fails
+    }
+    
+    // Check usage limits using the new backend operation checking system
+    const operationCheck = await checkOperation(file, PAGE_IDENTIFIER);
+    if (!operationCheck.allowed) {
+      return operationCheck.reason || 'Operation not allowed';
+    }
+
     const fileExtension = file.name.toLowerCase().split('.').pop();
     const isRawFormat = ['.cr2', '.arw', '.dng', '.nef', '.orf', '.rw2'].some(ext => file.name.toLowerCase().endsWith(ext));
     
@@ -396,15 +451,12 @@ export default function MicroJPEGLanding() {
     }
     
     // Landing page enforces 10MB limit for all users (free tier page)
-    // No need for API call - this is a static limit based on page type
     if (file.size > SESSION_LIMITS.free.maxFileSize) {
       return `${file.name}: File too large. Maximum size is 10MB on this page.`;
     }
     
-    // Page-based validation: Free landing page has specific limits
-    // For rate limiting, rely on backend processing rather than pre-upload API calls
     return null;
-  }, []);
+  }, [checkOperation]);
   
   // Lead magnet state
   const [leadMagnetEmail, setLeadMagnetEmail] = useState('');
@@ -479,6 +531,7 @@ export default function MicroJPEGLanding() {
         throw new Error(data.message || 'Failed to send guide');
       }
     } catch (error) {
+      console.error('Lead magnet error:', error);
       toast({
         title: "Something went wrong",
         description: "Please try again in a moment.",
@@ -612,7 +665,7 @@ export default function MicroJPEGLanding() {
         });
       }
     } catch (error) {
-      // Loyalty share tracking failed
+      console.log('Loyalty share tracking failed:', error);
     }
   };
 
@@ -672,6 +725,7 @@ export default function MicroJPEGLanding() {
 
     // ✅ FIXED: Use server-side tracking instead of local sessionStorage
     // Local sessionStorage was out of sync - server handles all limit checking
+    console.log('🔧 Skipping local storage checks - using server-side tracking');
     
     // Also check conversion limits if format conversion is enabled
     if (conversionEnabled && selectedFormats.length > 0) {
@@ -695,10 +749,10 @@ export default function MicroJPEGLanding() {
     }
 
     setIsProcessing(true);
-    // ✅ REMOVED: setShowModal(true) - now handled by UploadComplete()
-    // ✅ REMOVED: setModalState('processing') - now handled by UploadComplete()
-    // ✅ REMOVED: setProcessingProgress(0) - now handled by UploadComplete()
-    // ✅ REMOVED: setProcessingStatus('Preparing files...') - now handled by UploadComplete()
+    setShowModal(true);
+    setModalState('processing');
+    setProcessingProgress(0);
+    setProcessingStatus('Preparing files...');
     
     // Mark files as processing
     const fileIds = new Set(filesToProcess.map(f => f.id));
@@ -774,15 +828,14 @@ export default function MicroJPEGLanding() {
         
         // Usage stats are now automatically refreshed by header counter
         
-      }
-
-      // ✅ OPTIMIZATION: Store cached file IDs for future format conversions
-      if (data.cachedFileIds && Array.isArray(data.cachedFileIds)) {
-        setCachedFileIds(data.cachedFileIds);
+        console.log(`Recorded ${operationCount} operations for ${data.results.length} files processed`);
       }
 
       // Get the latest session data to ensure we don't lose any previous results
       const latestSession = sessionManager.getSession();
+      
+      console.log('startProcessing - Before updating session - existing results:', latestSession.results.length);
+      console.log('startProcessing - New results to add:', data.results?.length || 0);
       
       // Update session with results (accumulate with existing results)
       const newSession: SessionData = {
@@ -790,13 +843,24 @@ export default function MicroJPEGLanding() {
         results: [...latestSession.results, ...(data.results || [])],
         batchDownloadUrl: data.batchDownloadUrl,
       };
+      
+      console.log('startProcessing - After merging - total results:', newSession.results.length);
 
       setSession(newSession);
       sessionManager.updateSession(newSession);
 
-      // Compression completed successfully
+      // Instant counter update for zero-lag feedback
+      if (data.results && data.results.length > 0) {
+        updateCounterOptimistically(data.results.length);
+      }
+      
+      // Also refresh for backend verification with delay to ensure backend is updated
+      setTimeout(() => {
+        refreshUniversalCounter();
+      }, 500);
+      
 
-      // Usage stats tracking (backend only - no UI counters)
+      // Usage stats are now automatically refreshed by header counter
       setProcessingProgress(100);
       setProcessingStatus('MicroJPEG just saved you space!');
       setModalState('complete');
@@ -816,6 +880,7 @@ export default function MicroJPEGLanding() {
       }
 
     } catch (error) {
+      console.error('Compression error:', error);
       // Clear progress interval on error
       if (progressInterval) {
         clearInterval(progressInterval);
@@ -830,30 +895,14 @@ export default function MicroJPEGLanding() {
       setCurrentlyProcessingFormat(null); // Clear currently processing format
       setShowModal(false);
       
-      // Operation failed - continuing without counter dependencies
+      // Refresh counter to show current usage after failed operation
+      refreshUniversalCounter();
       
       // Don't clear selected files - keep them for thumbnails and format conversions
       // Clear newly added files to prevent reprocessing
       setNewlyAddedFiles([]);
     }
   }, [selectedFiles, user, session, selectedFormats, conversionEnabled, toast]);
-
-  // ✅ NEW: Upload Complete trigger - launches modal immediately on successful upload
-  const UploadComplete = useCallback(() => {
-    
-    // 1. Modal Component Render (at the top of sequence)
-    setShowModal(true);
-    
-    // 2. Then set modal state to processing
-    setModalState('processing');
-    setProcessingProgress(0);
-    setProcessingStatus('Preparing files...');
-    
-    toast({
-      title: "Upload successful!",
-      description: "Your files are ready. Processing will begin automatically.",
-    });
-  }, [toast]);
 
   // Download all results as comprehensive ZIP
   const downloadAllResults = useCallback(async () => {
@@ -899,6 +948,7 @@ export default function MicroJPEGLanding() {
       });
 
     } catch (error) {
+      console.error('Download all error:', error);
       toast({
         title: "Download failed",
         description: error instanceof Error ? error.message : "Failed to create download",
@@ -967,6 +1017,9 @@ export default function MicroJPEGLanding() {
     setProcessingStatus(`Converting to ${format.toUpperCase()}...`);
 
     try {
+      // Prepare FormData for the API
+      const formData = new FormData();
+      
       // Get fresh session data to check existing results
       const currentSession = sessionManager.getSession();
       
@@ -980,58 +1033,32 @@ export default function MicroJPEGLanding() {
       
       // If no files need processing for this format, skip
       if (filesToProcess.length === 0) {
+        console.log(`All files already have ${format.toUpperCase()} results, skipping processing`);
         setIsProcessing(false);
-        setCurrentlyProcessingFormat(null);
         return;
       }
+      
+      filesToProcess.forEach((file) => {
+        formData.append('files', file as File);
+      });
+
+      // Prepare compression settings for specific format
+      const settings = {
+        quality: 80,
+        outputFormat: [format], // Only process this specific format
+        resizeOption: 'keep-original',
+        compressionAlgorithm: 'standard',
+      };
+
+      formData.append('settings', JSON.stringify(settings));
 
       setProcessingProgress(20);
-      setProcessingStatus(`Converting to ${format.toUpperCase()}...`);
+      setProcessingStatus(`Processing ${format.toUpperCase()}...`);
 
-      let response;
-
-      // Use cached conversion if we have cached file IDs
-      if (cachedFileIds && cachedFileIds.length > 0) {
-        // Use cached conversion API
-        const cachedConversionData = {
-          cachedFileIds,
-          outputFormat: format,
-          settings: {
-            quality: 80,
-            resizeOption: 'keep-original',
-            compressionAlgorithm: 'standard',
-          }
-        };
-
-        response = await fetch('/api/convert-cached', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(cachedConversionData),
-        });
-      } else {
-        // Fallback to traditional upload if no cached files
-        const formData = new FormData();
-        
-        filesToProcess.forEach((file) => {
-          formData.append('files', file as File);
-        });
-
-        const settings = {
-          quality: 80,
-          outputFormat: [format],
-          resizeOption: 'keep-original',
-          compressionAlgorithm: 'standard',
-        };
-
-        formData.append('settings', JSON.stringify(settings));
-
-        response = await fetch('/api/compress', {
-          method: 'POST',
-          body: formData,
-        });
-      }
+      const response = await fetch('/api/compress', {
+        method: 'POST',
+        body: formData,
+      });
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -1055,11 +1082,21 @@ export default function MicroJPEGLanding() {
         // Usage recording is handled server-side by DualUsageTracker
         // No additional frontend recording needed
         
-        // Operation completed successfully
+        // Instant counter update for zero-lag feedback
+        updateCounterOptimistically(data.results.length);
+        
+        // Also refresh for backend verification
+        refreshUniversalCounter();
+        
+        
+        console.log(`Recorded ${operationCount} operations for ${data.results.length} files converted to ${format}`);
       }
 
       // Get the latest session data to ensure we don't lose any previous results
       const latestSession = sessionManager.getSession();
+      
+      console.log('processSpecificFormat - Before updating session - existing results:', latestSession.results.length);
+      console.log('processSpecificFormat - New results to add:', data.results?.length || 0);
       
       // Update session with new results (append to existing results)
       const updatedSession = sessionManager.updateSession({
@@ -1068,6 +1105,7 @@ export default function MicroJPEGLanding() {
         compressions: latestSession.compressions + data.results.length,
       });
       
+      console.log('processSpecificFormat - After merging - total results:', updatedSession.results.length);
       setSession(updatedSession);
 
       // Usage stats are now automatically refreshed by header counter
@@ -1083,6 +1121,7 @@ export default function MicroJPEGLanding() {
       setNewlyAddedFiles([]);
 
     } catch (error) {
+      console.error('Format conversion error:', error);
       toast({
         title: "Conversion failed",
         description: error instanceof Error ? error.message : "An error occurred during format conversion",
@@ -1197,15 +1236,12 @@ export default function MicroJPEGLanding() {
       // Reset format selection to JPEG only on every new file upload
       setSelectedFormats(['jpeg']);
       
-      // ✅ NEW: Trigger modal launch immediately on successful upload
-      UploadComplete();
-      
       toast({
-        title: "Files uploaded successfully!",
-        description: `${validFiles.length} file(s) ready for processing.`,
+        title: "Files added - Auto-compressing...",
+        description: `${validFiles.length} file(s) added. Starting compression automatically.`,
       });
     }
-  }, [selectedFiles, toast, UploadComplete]);
+  }, [selectedFiles, toast]);
 
   // Drag and drop handlers
   const handleDrag = useCallback((e: React.DragEvent) => {
@@ -1559,6 +1595,11 @@ export default function MicroJPEGLanding() {
                 </div>
 
               </Card>
+
+              {/* Mascot */}
+              <div className="hidden sm:block absolute -bottom-4 -right-4 w-16 h-16 lg:w-24 lg:h-24 animate-float">
+                <img src={mascotUrl} alt="MicroJPEG Mascot" className="w-full h-full object-contain" />
+              </div>
             </div>
           </div>
         </div>
@@ -1644,6 +1685,7 @@ export default function MicroJPEGLanding() {
                         onClick={downloadAllResults}
                         data-testid="button-download-all"
                       >
+                        <Download className="w-4 h-4 mr-2" />
                         Download All
                       </Button>
                       
@@ -1706,7 +1748,7 @@ export default function MicroJPEGLanding() {
                         <div className="flex items-center justify-between mb-4">
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 bg-brand-teal/10 rounded-lg flex items-center justify-center">
-                              <span className="text-xs">👑</span>
+                              <Crown className="w-5 h-5 text-brand-teal" />
                             </div>
                             <div>
                               <h4 className="text-lg font-bold text-gray-900">Test Premium</h4>
@@ -2034,7 +2076,11 @@ export default function MicroJPEGLanding() {
                                       style={{ backgroundColor: formatInfo.color }}
                                       onClick={() => window.open(result.downloadUrl, '_blank')}
                                     >
-                                      <span className="text-xs">📄</span>
+                                      <img 
+                                        src={formatInfo.icon} 
+                                        alt={result.outputFormat} 
+                                        className="w-4 h-4 object-contain"
+                                      />
                                       <span className="text-white text-xs font-bold">
                                         {(result.outputFormat || 'unknown').toUpperCase()}
                                       </span>
@@ -2059,6 +2105,14 @@ export default function MicroJPEGLanding() {
       {/* Test Premium for $1 Section */}
       <section className="py-16 bg-gradient-to-r from-brand-teal/10 via-brand-gold/10 to-brand-teal/10 relative overflow-hidden">
         <div className="max-w-4xl mx-auto px-4 text-center relative">
+          {/* Owl Mascot */}
+          <div className="absolute -top-8 -left-4 w-16 h-16 opacity-30">
+            <img src={owlMascot01} alt="" className="w-full h-full object-contain" />
+          </div>
+          <div className="absolute -bottom-8 -right-4 w-20 h-20 opacity-30">
+            <img src={owlMascot02} alt="" className="w-full h-full object-contain" />
+          </div>
+          
           <div className="bg-gradient-to-br from-white to-gray-50 rounded-3xl shadow-2xl p-8 border border-brand-gold/20 relative">
             {/* Premium Badge - Fixed Mobile Layout */}
             <div 
@@ -2104,21 +2158,21 @@ export default function MicroJPEGLanding() {
               <div className="grid md:grid-cols-3 gap-6 mb-8">
                 <div className="text-center">
                   <div className="w-12 h-12 bg-brand-teal/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <span className="text-lg">⚡</span>
+                    <Zap className="w-6 h-6 text-brand-teal" />
                   </div>
                   <h3 className="font-semibold text-brand-dark mb-2">300 Operations</h3>
                   <p className="text-sm text-gray-600">Test bulk processing power</p>
                 </div>
                 <div className="text-center">
                   <div className="w-12 h-12 bg-brand-gold/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <span className="text-lg">👑</span>
+                    <Crown className="w-6 h-6 text-brand-gold" />
                   </div>
                   <h3 className="font-semibold text-brand-dark mb-2">All Premium Features</h3>
                   <p className="text-sm text-gray-600">Advanced controls, no ads, API access</p>
                 </div>
                 <div className="text-center">
                   <div className="w-12 h-12 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <span className="text-lg">🛡️</span>
+                    <Shield className="w-6 h-6 text-red-500" />
                   </div>
                   <h3 className="font-semibold text-brand-dark mb-2">24-Hour Access</h3>
                   <p className="text-sm text-gray-600">No recurring charges</p>
@@ -2133,7 +2187,7 @@ export default function MicroJPEGLanding() {
                   data-testid="button-test-premium"
                 >
                   🚀 Test Premium for $1
-                  <span className="ml-2">→</span>
+                  <ArrowRight className="w-5 h-5 ml-2" />
                 </Button>
                 <p className="text-xs text-gray-500 max-w-xs">
                   💳 Secure payment via Stripe • Cancel anytime • No subscription
@@ -2196,9 +2250,9 @@ export default function MicroJPEGLanding() {
               <div className="mt-6 flex flex-col sm:flex-row justify-center items-center gap-4 sm:gap-6 text-sm text-gray-600">
                 <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-2">
                   <div className="flex flex-col sm:flex-row sm:-space-x-2 gap-1 sm:gap-0 items-center">
-                    <div className="w-8 h-8 bg-blue-500 rounded-full border-2 border-white flex items-center justify-center text-white text-xs font-bold">A</div>
-                    <div className="w-8 h-8 bg-green-500 rounded-full border-2 border-white flex items-center justify-center text-white text-xs font-bold">B</div>
-                    <div className="w-8 h-8 bg-purple-500 rounded-full border-2 border-white flex items-center justify-center text-white text-xs font-bold">C</div>
+                    <img src={betaUser1} alt="Beta user" className="w-8 h-8 rounded-full border-2 border-white object-cover" />
+                    <img src={betaUser2} alt="Beta user" className="w-8 h-8 rounded-full border-2 border-white object-cover" />
+                    <img src={betaUser3} alt="Beta user" className="w-8 h-8 rounded-full border-2 border-white object-cover" />
                     <div className="w-8 h-8 bg-brand-teal rounded-full border-2 border-white flex items-center justify-center text-white text-xs font-bold">+</div>
                   </div>
                   <span className="text-center">500+ beta users</span>
@@ -2243,7 +2297,7 @@ export default function MicroJPEGLanding() {
               <div className="mb-4">⭐⭐⭐⭐⭐</div>
               <p className="text-gray-700 mb-4 italic">"Amazing compression quality! Reduced our image sizes by 80% while keeping perfect quality. The API is super easy to use."</p>
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold">A</div>
+                <img src={betaUser1} alt="Alex M." className="w-10 h-10 rounded-full object-cover" />
                 <div>
                   <div className="font-semibold text-sm">Alex M.</div>
                   <div className="text-gray-500 text-xs">Startup Founder</div>
@@ -2255,7 +2309,7 @@ export default function MicroJPEGLanding() {
               <div className="mb-4">⭐⭐⭐⭐⭐</div>
               <p className="text-gray-700 mb-4 italic">"Perfect for our e-commerce site! Compressed 1000+ product images with zero quality loss. Saves us hours weekly."</p>
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center text-white font-bold">S</div>
+                <img src={betaUser2} alt="Sarah K." className="w-10 h-10 rounded-full object-cover" />
                 <div>
                   <div className="font-semibold text-sm">Sarah K.</div>
                   <div className="text-gray-500 text-xs">Web Developer</div>
@@ -2267,7 +2321,7 @@ export default function MicroJPEGLanding() {
               <div className="mb-4">⭐⭐⭐⭐⭐</div>
               <p className="text-gray-700 mb-4 italic">"Incredible! Turned my 15MB photos into 1.5MB web images without losing any detail. This tool is a lifesaver!"</p>
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center text-white font-bold">M</div>
+                <img src={betaUser3} alt="Mike R." className="w-10 h-10 rounded-full object-cover" />
                 <div>
                   <div className="font-semibold text-sm">Mike R.</div>
                   <div className="text-gray-500 text-xs">Photography Enthusiast</div>
@@ -2582,21 +2636,21 @@ export default function MicroJPEGLanding() {
               <div className="grid md:grid-cols-3 gap-6">
                 <div className="text-center">
                   <div className="w-12 h-12 bg-brand-teal/10 rounded-lg mx-auto mb-3 flex items-center justify-center">
-                    <span className="text-lg">⚡</span>
+                    <Zap className="w-6 h-6 text-brand-teal" />
                   </div>
                   <h4 className="font-semibold text-brand-dark mb-2">Lightning Fast</h4>
                   <p className="text-sm text-gray-600">Process images in seconds with our optimized servers</p>
                 </div>
                 <div className="text-center">
                   <div className="w-12 h-12 bg-brand-teal/10 rounded-lg mx-auto mb-3 flex items-center justify-center">
-                    <span className="text-lg">🛡️</span>
+                    <Shield className="w-6 h-6 text-brand-teal" />
                   </div>
                   <h4 className="font-semibold text-brand-dark mb-2">Secure & Reliable</h4>
                   <p className="text-sm text-gray-600">Your images are processed securely and never stored</p>
                 </div>
                 <div className="text-center">
                   <div className="w-12 h-12 bg-brand-teal/10 rounded-lg mx-auto mb-3 flex items-center justify-center">
-                    <span className="text-lg">⚙️</span>
+                    <Settings className="w-6 h-6 text-brand-teal" />
                   </div>
                   <h4 className="font-semibold text-brand-dark mb-2">Highly Customizable</h4>
                   <p className="text-sm text-gray-600">Fine-tune compression settings for your specific needs</p>
@@ -2630,11 +2684,11 @@ export default function MicroJPEGLanding() {
             {/* Risk Reversal */}
             <div className="flex justify-center items-center gap-8 text-sm opacity-90 text-black">
               <div className="flex items-center gap-2">
-                <span className="text-sm">🛡️</span>
+                <Shield className="w-5 h-5" />
                 <span>30-day money-back guarantee</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-sm">⚡</span>
+                <Zap className="w-5 h-5" />
                 <span>Setup in under 5 minutes</span>
               </div>
               <div className="flex items-center gap-2">
@@ -2693,9 +2747,9 @@ export default function MicroJPEGLanding() {
                         >
                           <span className="font-medium text-gray-200">{faq.question}</span>
                           {expandedQuestions.has(index) ? (
-                            <span className="text-teal-400 text-lg">−</span>
+                            <Minus className="w-5 h-5 text-teal-400 flex-shrink-0" />
                           ) : (
-                            <span className="text-gray-400 text-lg">+</span>
+                            <Plus className="w-5 h-5 text-gray-400 flex-shrink-0" />
                           )}
                         </button>
                         {expandedQuestions.has(index) && (
@@ -2720,6 +2774,7 @@ export default function MicroJPEGLanding() {
             {/* Brand */}
             <div className="space-y-4">
               <div className="flex items-center gap-3">
+                <img src={logoUrl} alt="MicroJPEG Logo" className="w-10 h-10" />
                 <span className="text-xl font-bold font-poppins">MicroJPEG</span>
               </div>
               <p className="text-gray-600 font-opensans">
