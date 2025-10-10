@@ -981,6 +981,7 @@ export default function MicroJPEGLanding() {
       // If no files need processing for this format, skip
       if (filesToProcess.length === 0) {
         setIsProcessing(false);
+        setCurrentlyProcessingFormat(null);
         return;
       }
 
