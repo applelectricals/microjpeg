@@ -325,52 +325,6 @@ export default function ConversionPage() {
     setProcessingProgress(0);
     setProcessingFileIds(new Set(files.map(f => f.id)));
 
-    // Add counter validation before upload 
-    try {
-      const response = await fetch('/api/universal-usage-stats', {
-        method: 'GET',
-        credentials: 'include',
-        cache: 'no-store',
-      });
-      
-      if (response.ok) {
-        const stats = await response.json();
-        const operationType = fromFormat!.category === 'raw' ? 'raw' : 'standard';
-        const rawStats = stats.stats?.[operationType] || {};
-        const { used: hourlyUsed = 0, limit: hourlyLimit = 5 } = rawStats.hourly || {};
-        const { used: dailyUsed = 0, limit: dailyLimit = 10 } = rawStats.daily || {};
-        
-        if (hourlyUsed >= hourlyLimit) {
-          const nextHour = new Date(Date.now() + 60*60*1000).toLocaleTimeString('en-US', { 
-            hour: '2-digit', 
-            minute: '2-digit'
-          });
-          toast({
-            title: "Hourly Limit Reached",
-            description: `You've reached your hourly limit of ${hourlyLimit} ${operationType} operations. Please try again after ${nextHour}, or upgrade for unlimited access!`,
-            variant: "destructive",
-          });
-          setIsProcessing(false);
-          setModalState('hidden');
-          return;
-        }
-        
-        if (dailyUsed >= dailyLimit) {
-          toast({
-            title: "Daily Limit Reached", 
-            description: `You've reached your daily limit of ${dailyLimit} ${operationType} operations. Limit resets at midnight, or upgrade for unlimited access!`,
-            variant: "destructive",
-          });
-          setIsProcessing(false);
-          setModalState('hidden');
-          return;
-        }
-      }
-    } catch (error) {
-      console.log('Could not check limits:', error);
-      // Continue with upload if limit check fails
-    }
-
     try {
       // Process files using the appropriate endpoint
       const formData = new FormData();

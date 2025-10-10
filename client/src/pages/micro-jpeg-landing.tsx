@@ -15,7 +15,6 @@ import { apiRequest } from '@/lib/queryClient';
 import { sessionManager } from '@/lib/sessionManager';
 import { canConvert, recordCompression } from '@/lib/usageTracker';
 import Header from '@/components/header';
-import { useOperationCheck } from '@/hooks/useOperationCheck';
 import { SEOHead } from '@/components/SEOHead';
 import { SEO_CONTENT, STRUCTURED_DATA } from '@/data/seoData';
 import { default as logoUrl } from '@/assets/mascot-logo-small.ts';
@@ -389,15 +388,14 @@ export default function MicroJPEGLanding() {
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
-  const { checkOperation } = useOperationCheck();
 
-  // File validation function - now inside component to access checkOperation hook
+  // File validation function - optimized for landing page performance (client-side only)
   const validateFile = useCallback(async (file: File, isUserAuthenticated: boolean = false): Promise<string | null> => {
-    // Check usage limits using the new backend operation checking system
-    const operationCheck = await checkOperation(file, PAGE_IDENTIFIER);
-    if (!operationCheck.allowed) {
-      return operationCheck.reason || 'Operation not allowed';
-    }
+    // Skip API call for performance on landing page - do client-side validation only
+    // const operationCheck = await checkOperation(file, PAGE_IDENTIFIER);
+    // if (!operationCheck.allowed) {
+    //   return operationCheck.reason || 'Operation not allowed';
+    // }
 
     const fileExtension = file.name.toLowerCase().split('.').pop();
     const isRawFormat = ['.cr2', '.arw', '.dng', '.nef', '.orf', '.rw2'].some(ext => file.name.toLowerCase().endsWith(ext));
@@ -412,7 +410,7 @@ export default function MicroJPEGLanding() {
     }
     
     return null;
-  }, [checkOperation]);
+  }, []); // Removed checkOperation dependency
   
   // Lead magnet state
   const [leadMagnetEmail, setLeadMagnetEmail] = useState('');

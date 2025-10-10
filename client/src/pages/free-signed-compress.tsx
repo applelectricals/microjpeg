@@ -10,7 +10,6 @@ import { Switch } from '@/components/ui/switch';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
-import { useUsageStats } from '@/hooks/useUsageStats';
 import { apiRequest } from '@/lib/queryClient';
 import { getUsageStats, canCompress, canConvert, recordCompression, recordConversion, isConversionRequest, canOperateHourly } from '@/lib/usageTracker';
 import Header from '@/components/header';
@@ -407,7 +406,10 @@ const trackSocialShare = async (platform: string) => {
 
 export default function MicroJPEGLanding() {
   const { isAuthenticated, user, isLoading } = useAuth();
-  const { data: usageStats, refetch: refetchUsage } = useUsageStats();
+  // Disabled usage stats polling for performance - using fallback display values
+  // const { data: usageStats, refetch: refetchUsage } = useUsageStats();
+  const usageStats = { operations: { monthly: { used: 0, limit: 500 } } }; // Fallback for display
+  const refetchUsage = () => {}; // No-op function
   const { toast } = useToast();
   
   // Authentication guard - redirect to login if not authenticated

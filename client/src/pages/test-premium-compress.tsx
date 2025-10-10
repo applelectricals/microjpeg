@@ -10,7 +10,6 @@ import { Switch } from '@/components/ui/switch';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, useSubscription } from '@/hooks/useAuth';
-import { useUsageStats } from '@/hooks/useUsageStats';
 import { Dropbox } from 'dropbox';
 import { canOperateHourly, recordCompression, getUsageStats } from '@/lib/usageTracker';
 import Header from '@/components/header';
@@ -341,7 +340,10 @@ export default function TestPremiumCompress() {
       setShowPaymentModal(true);
     }
   }, [isAuthenticated, isLoading, hasTestPremiumAccess]);
-  const { data: usageStats, refetch: refetchUsage } = useUsageStats();
+  // Disabled usage stats polling for performance - using fallback display values
+  // const { data: usageStats, refetch: refetchUsage } = useUsageStats();
+  const usageStats = { regular: { monthly: { used: 0 } } }; // Fallback for display
+  const refetchUsage = () => {}; // No-op function
 
   // Performance monitoring
   useEffect(() => {

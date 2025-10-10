@@ -24,8 +24,8 @@ export function useUsageStats(pageIdentifier?: string) {
   
   return useQuery<UsageStats>({
     queryKey: ['/api/usage-stats', currentPageId],
-    enabled: true,
-    refetchInterval: 10000, // Refresh every 10 seconds
-    staleTime: 0, // Allow immediate refetch
+    enabled: false, // Disable automatic fetching to improve performance
+    refetchInterval: false, // Stop polling every 10 seconds
+    staleTime: Infinity, // Cache indefinitely since not actively used
   });
 }

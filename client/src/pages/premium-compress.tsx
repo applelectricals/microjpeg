@@ -233,7 +233,10 @@ export default function MicroJPEGLanding() {
   const { isAuthenticated, user, isLoading } = useAuth();
   const subscriptionData = useSubscription();
   const { isPremium, subscriptionStatus } = subscriptionData;
-  const { data: usageStats, refetch: refetchUsage } = useUsageStats();
+  // Disabled usage stats polling for performance - using fallback display values
+  // const { data: usageStats, refetch: refetchUsage } = useUsageStats();
+  const usageStats = { regular: { monthly: { used: 0 } } }; // Fallback for display
+  const refetchUsage = () => {}; // No-op function
   const { toast } = useToast();
 
   // Authentication guard - redirect to login if not authenticated
