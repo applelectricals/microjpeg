@@ -4488,16 +4488,16 @@ var import_path = __toESM(require("path"), 1);
 var import_child_process = require("child_process");
 var import_util = require("util");
 import_sharp.default.cache({
-  memory: 2048,
-  // Use 2GB cache memory 
-  files: 200,
-  // Cache up to 200 files
-  items: 1e3
-  // Cache up to 1000 operations
+  memory: 3072,
+  // Use 3GB cache memory for maximum performance
+  files: 500,
+  // Cache up to 500 files
+  items: 2e3
+  // Cache up to 2000 operations
 });
 import_sharp.default.concurrency(4);
 import_sharp.default.simd(true);
-console.log("\u{1F680} Sharp Performance Optimized: 2GB cache, 4 CPU cores, SIMD enabled");
+console.log("\u{1F680} MAXIMUM Sharp Performance: 3GB cache, 4 CPU cores, SIMD enabled");
 var dcraw;
 try {
   if (typeof require !== "undefined") {
@@ -4553,7 +4553,17 @@ var CompressionEngine = class _CompressionEngine {
       switch (outputFormat.toLowerCase()) {
         case "jpeg":
         case "jpg":
-          await sharpInstance.jpeg({ quality, progressive: true, mozjpeg: true }).toFile(outputPath);
+          await sharpInstance.jpeg({
+            quality,
+            progressive: false,
+            // Disable progressive for speed
+            mozjpeg: false,
+            // Disable mozjpeg for speed
+            optimiseCoding: false,
+            // Disable optimization for speed
+            trellisQuantisation: false
+            // Disable trellis for speed
+          }).toFile(outputPath);
           break;
         case "png":
           await sharpInstance.png({ quality, compressionLevel: 6, progressive: true }).toFile(outputPath);
@@ -4571,7 +4581,15 @@ var CompressionEngine = class _CompressionEngine {
           await sharpInstance.tiff({ quality: Math.max(quality, 85), compression: "lzw" }).toFile(outputPath);
           break;
         default:
-          await sharpInstance.jpeg({ quality, progressive: true }).toFile(outputPath);
+          await sharpInstance.jpeg({
+            quality,
+            progressive: false,
+            // Disable progressive for speed
+            optimiseCoding: false,
+            // Disable optimization for speed
+            trellisQuantisation: false
+            // Disable trellis for speed
+          }).toFile(outputPath);
       }
       console.log(`Successfully processed RAW file to ${outputFormat.toUpperCase()}`);
     } catch (error) {
@@ -4724,10 +4742,14 @@ var CompressionEngine = class _CompressionEngine {
     const maxIterations = 4;
     while (iterations < maxIterations) {
       iterations++;
-      let sharpInstance = (0, import_sharp.default)(inputPath);
-      if (webOptimized) {
-        sharpInstance = sharpInstance.withMetadata({}).normalize().rotate();
-      }
+      let sharpInstance = (0, import_sharp.default)(inputPath, {
+        sequentialRead: true,
+        // Faster for large files
+        limitInputPixels: false,
+        // Remove pixel limit
+        density: 72
+        // Optimized density
+      });
       sharpInstance = sharpInstance.jpeg({
         quality: currentQuality,
         progressive: false,
@@ -4834,7 +4856,14 @@ var CompressionEngine = class _CompressionEngine {
     }
     let sharpInstance;
     try {
-      sharpInstance = (0, import_sharp.default)(inputPath);
+      sharpInstance = (0, import_sharp.default)(inputPath, {
+        sequentialRead: true,
+        // Faster for large files (reduces memory usage)
+        limitInputPixels: false,
+        // Remove pixel limit for large images
+        density: 72
+        // Set reasonable density for web images
+      });
     } catch (error) {
       throw new Error(`Failed to process ${inputExtension?.toUpperCase()} file: ${error.message}`);
     }
@@ -4843,7 +4872,7 @@ var CompressionEngine = class _CompressionEngine {
       sharpInstance = sharpInstance.resize({ kernel: resizeKernel });
     }
     if (webOptimized) {
-      sharpInstance = sharpInstance.withMetadata({}).normalize().rotate();
+      sharpInstance = sharpInstance.rotate();
     }
     switch (outputFormat) {
       case "jpeg":
@@ -5044,10 +5073,14 @@ var CompressionEngine = class _CompressionEngine {
     const results = [];
     for (const width of options.sizes) {
       const outputPath = import_path.default.join(outputDir, `${baseName}-${width}w.${options.format === "jpeg" ? "jpg" : options.format}`);
-      let sharpInstance = (0, import_sharp.default)(inputPath);
-      if (options.webOptimized) {
-        sharpInstance = sharpInstance.withMetadata({}).normalize().rotate();
-      }
+      let sharpInstance = (0, import_sharp.default)(inputPath, {
+        sequentialRead: true,
+        // Faster for large files
+        limitInputPixels: false,
+        // Remove pixel limit
+        density: 72
+        // Optimized density
+      });
       sharpInstance = sharpInstance.resize(width, null, {
         kernel: import_sharp.default.kernel.lanczos3,
         withoutEnlargement: true
