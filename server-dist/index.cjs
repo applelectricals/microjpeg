@@ -755,14 +755,6 @@ var init_DualUsageTracker = __esm({
           const usage = await this.getCurrentUsage();
           const limits = this.getLimits(fileType, pageIdentifier);
           if (fileType === "raw") {
-            if (usage.rawHourly >= limits.hourly) {
-              return {
-                allowed: false,
-                reason: `Hourly RAW limit reached (${limits.hourly}). Try again in ${Math.ceil((new Date(usage.hourlyResetAt).getTime() - Date.now()) / 6e4)} minutes.`,
-                usage,
-                limits
-              };
-            }
             if (usage.rawDaily >= limits.daily) {
               return {
                 allowed: false,
@@ -780,14 +772,6 @@ var init_DualUsageTracker = __esm({
               };
             }
           } else {
-            if (usage.regularHourly >= limits.hourly) {
-              return {
-                allowed: false,
-                reason: `Hourly limit reached (${limits.hourly}). Try again in ${Math.ceil((new Date(usage.hourlyResetAt).getTime() - Date.now()) / 6e4)} minutes.`,
-                usage,
-                limits
-              };
-            }
             if (usage.regularDaily >= limits.daily) {
               return {
                 allowed: false,
@@ -4503,6 +4487,17 @@ var import_fs = require("fs");
 var import_path = __toESM(require("path"), 1);
 var import_child_process = require("child_process");
 var import_util = require("util");
+import_sharp.default.cache({
+  memory: 2048,
+  // Use 2GB cache memory 
+  files: 200,
+  // Cache up to 200 files
+  items: 1e3
+  // Cache up to 1000 operations
+});
+import_sharp.default.concurrency(4);
+import_sharp.default.simd(true);
+console.log("\u{1F680} Sharp Performance Optimized: 2GB cache, 4 CPU cores, SIMD enabled");
 var dcraw;
 try {
   if (typeof require !== "undefined") {
@@ -7622,7 +7617,8 @@ var UNIFIED_PLANS = {
       maxFileSize: 10 * 1024 * 1024,
       // 10MB
       maxOperationsPerDay: 25,
-      maxOperationsPerHour: 5,
+      maxOperationsPerHour: null,
+      // No hourly limit
       maxConcurrentUploads: 1,
       processingTimeout: 30,
       allowedFormats: "*",
@@ -7634,7 +7630,6 @@ var UNIFIED_PLANS = {
       "All image formats supported",
       "Max 10MB file size",
       "Max 25 operations/day",
-      "Max 5 operations/hour",
       "1 concurrent upload"
     ],
     requiresSignup: false
@@ -7651,7 +7646,8 @@ var UNIFIED_PLANS = {
       maxFileSize: 10 * 1024 * 1024,
       // 10MB
       maxOperationsPerDay: 25,
-      maxOperationsPerHour: 5,
+      maxOperationsPerHour: null,
+      // No hourly limit
       maxConcurrentUploads: 1,
       processingTimeout: 30,
       allowedFormats: "*",
@@ -7663,7 +7659,6 @@ var UNIFIED_PLANS = {
       "All image formats supported",
       "Max 10MB file size",
       "Max 25 operations/day",
-      "Max 5 operations/hour",
       "1 concurrent upload"
     ],
     requiresSignup: true
@@ -7683,7 +7678,8 @@ var UNIFIED_PLANS = {
       // 50MB
       maxOperationsPerDay: 300,
       // all 300 can be used in 1 day
-      maxOperationsPerHour: 20,
+      maxOperationsPerHour: null,
+      // No hourly limit
       maxConcurrentUploads: 3,
       processingTimeout: 60,
       allowedFormats: "*",
