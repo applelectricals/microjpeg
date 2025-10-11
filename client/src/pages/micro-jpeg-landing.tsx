@@ -13,7 +13,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { apiRequest } from '@/lib/queryClient';
 // Removed redundant usage trackers
 import { sessionManager } from '@/lib/sessionManager';
-import { canConvert, recordCompression } from '@/lib/usageTracker';
+import { canConvert, recordCompression, recordConversion, isConversionRequest } from '@/lib/usageTracker';
 import Header from '@/components/header';
 import { SEOHead } from '@/components/SEOHead';
 import { SEO_CONTENT, STRUCTURED_DATA } from '@/data/seoData';
@@ -777,6 +777,15 @@ export default function MicroJPEGLanding() {
         // Record operations in local storage
         recordCompression(operationCount);
         
+        // Also record conversions for RAW files and format changes
+        const conversionCount = data.results.filter((result: CompressionResult) => 
+          result.wasConverted || isConversionRequest(result.originalFormat, result.outputFormat)
+        ).length;
+        
+        if (conversionCount > 0) {
+          recordConversion(conversionCount);
+        }
+        
         // Usage recording is handled server-side by DualUsageTracker
         // No additional frontend recording needed
         
@@ -1018,6 +1027,15 @@ export default function MicroJPEGLanding() {
         
         // Record operations in local storage
         recordCompression(operationCount);
+        
+        // Also record conversions for RAW files and format changes
+        const conversionCount = data.results.filter((result: CompressionResult) => 
+          result.wasConverted || isConversionRequest(result.originalFormat, result.outputFormat)
+        ).length;
+        
+        if (conversionCount > 0) {
+          recordConversion(conversionCount);
+        }
         
         // Usage recording is handled server-side by DualUsageTracker
         // No additional frontend recording needed

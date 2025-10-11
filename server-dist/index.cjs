@@ -11222,28 +11222,48 @@ async function registerRoutes(app2) {
       const baseName = import_path4.default.parse(originalName).name;
       const downloadName = `${baseName}_compressed${extension}`;
       if (job.cdnUrl) {
-        console.log(`\u{1F310} Redirecting download to CDN: ${job.cdnUrl}`);
+        console.log(`\u{1F310} CDN redirect: ${job.cdnUrl}`);
         res.setHeader("Content-Disposition", `attachment; filename="${downloadName}"`);
-        return res.redirect(302, job.cdnUrl);
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        return res.redirect(301, job.cdnUrl);
       }
       if (!job.compressedPath) {
         return res.status(404).json({ error: "Compressed file not found" });
       }
-      await import_promises.default.access(job.compressedPath);
+      const stats = await import_promises.default.stat(job.compressedPath);
       res.setHeader("Content-Disposition", `attachment; filename="${downloadName}"`);
       res.setHeader("Content-Type", "application/octet-stream");
-      console.log(`\u{1F4C1} Serving local download: ${job.compressedPath}`);
-      res.download(job.compressedPath, downloadName, (err) => {
-        if (err) {
-          console.error("Download error:", err);
-          if (!res.headersSent) {
-            res.status(404).json({ error: "File not found" });
-          }
-        }
-      });
+      res.setHeader("Content-Length", stats.size.toString());
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      res.setHeader("Accept-Ranges", "bytes");
+      const range = req.headers.range;
+      if (range) {
+        const [start, end] = range.replace(/bytes=/, "").split("-").map(Number);
+        const actualEnd = end || stats.size - 1;
+        const contentLength = actualEnd - start + 1;
+        res.status(206);
+        res.setHeader("Content-Range", `bytes ${start}-${actualEnd}/${stats.size}`);
+        res.setHeader("Content-Length", contentLength.toString());
+        const fileStream = (0, import_fs4.createReadStream)(job.compressedPath, {
+          start,
+          end: actualEnd,
+          highWaterMark: 1024 * 1024
+          // 1MB chunks for large files
+        });
+        fileStream.pipe(res);
+      } else {
+        const fileStream = (0, import_fs4.createReadStream)(job.compressedPath, {
+          highWaterMark: 1024 * 1024
+          // 1MB chunks (was default 64KB)
+        });
+        fileStream.pipe(res);
+      }
+      console.log(`\u{1F4C1} Optimized download: ${job.compressedPath} (${(stats.size / 1024 / 1024).toFixed(2)}MB)`);
     } catch (error) {
-      console.error("File access error:", error);
-      res.status(404).json({ error: "File not found" });
+      console.error("Download error:", error);
+      if (!res.headersSent) {
+        res.status(404).json({ error: "File not found" });
+      }
     }
   });
   app2.get("/api/image/:jobId", async (req, res) => {
@@ -11337,9 +11357,16 @@ async function registerRoutes(app2) {
       const zipFilename = `microjpeg_batch_compress_${Date.now()}.zip`;
       res.setHeader("Content-Type", "application/zip");
       res.setHeader("Content-Disposition", `attachment; filename="${zipFilename}"`);
+      res.setHeader("Transfer-Encoding", "chunked");
       const archive = (0, import_archiver.default)("zip", {
-        zlib: { level: 9 }
-        // Best compression
+        zlib: {
+          level: 6,
+          // Balanced compression (was 9 - too slow!)
+          chunkSize: 64 * 1024
+          // 64KB chunks
+        },
+        statConcurrency: 4
+        // Process 4 files concurrently
       });
       archive.on("error", (err) => {
         console.error("Archive error:", err);
@@ -12987,8 +13014,13 @@ async function registerRoutes(app2) {
         const downloadName = `converted_image.${ext}`;
         res.setHeader("Content-Type", contentType2);
         res.setHeader("Content-Disposition", `attachment; filename="${downloadName}"`);
-        res.setHeader("Content-Length", stats.size);
-        const fileStream = (0, import_fs4.createReadStream)(filePath);
+        res.setHeader("Content-Length", stats.size.toString());
+        res.setHeader("Cache-Control", "public, max-age=3600");
+        res.setHeader("Accept-Ranges", "bytes");
+        const fileStream = (0, import_fs4.createReadStream)(filePath, {
+          highWaterMark: 1024 * 1024
+          // 1MB chunks for faster streaming
+        });
         fileStream.pipe(res);
         console.log(`Special format download: ${filePath} (${stats.size} bytes) as ${downloadName}`);
         return;

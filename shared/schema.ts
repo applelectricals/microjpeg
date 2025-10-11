@@ -1,11 +1,37 @@
 import { pgTable, serial, varchar, integer, timestamp, decimal, boolean, jsonb, text } from 'drizzle-orm/pg-core';
+import { z } from 'zod';
+
+// Zod schemas for validation
+export const loginSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+});
+
+export const signupSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+  firstName: z.string().min(1, 'First name is required'),
+  lastName: z.string().min(1, 'Last name is required'),
+});
+
+export type LoginInput = z.infer<typeof loginSchema>;
+export type SignupInput = z.infer<typeof signupSchema>;
 
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
-  email: varchar('email', { length: 255 }),
-  password: varchar('password', { length: 255 }),
-  createdAt: timestamp('created_at').defaultNow()
+  email: varchar('email', { length: 255 }).notNull().unique(),
+  password: varchar('password', { length: 255 }).notNull(),
+  firstName: varchar('first_name', { length: 255 }),
+  lastName: varchar('last_name', { length: 255 }),
+  subscriptionTier: varchar('subscription_tier', { length: 50 }).default('free'),
+  lastLogin: timestamp('last_login'),
+  emailVerified: boolean('email_verified').default(false),
+  emailVerificationToken: varchar('email_verification_token', { length: 255 }),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow()
 });
+
+export type User = typeof users.$inferSelect;
 
 export const sessions = pgTable('sessions', {
   id: serial('id').primaryKey(),
@@ -228,30 +254,13 @@ export const anonymousSessionScopes = pgTable('anonymous_SessionScopes', {
   createdAt: timestamp('created_at').defaultNow()
 });
 
-export const loginSchema = pgTable('login_Schema', {
-  id: serial('id').primaryKey(),
-  referrerId: integer('referrer_id'),
-  referredId: integer('referred_id'),
-  code: varchar('code', { length: 100 }),
-  status: varchar('status', { length: 50 }),
-  createdAt: timestamp('created_at').defaultNow()
-});
-
-export const signupSchema = pgTable('signup_Schema', {
-  id: serial('id').primaryKey(),
-  referrerId: integer('referrer_id'),
-  referredId: integer('referred_id'),
-  code: varchar('code', { length: 100 }),
-  status: varchar('status', { length: 50 }),
-  createdAt: timestamp('created_at').defaultNow()
-});
-
 export const specialFormatTrials = pgTable('special_FormatTrials', {
   id: serial('id').primaryKey(),
-  referrerId: integer('referrer_id'),
-  referredId: integer('referred_id'),
-  code: varchar('code', { length: 100 }),
-  status: varchar('status', { length: 50 }),
+  ipAddress: varchar('ip_address', { length: 255 }).notNull(),
+  userAgent: varchar('user_agent', { length: 500 }),
+  browserFingerprint: varchar('browser_fingerprint', { length: 255 }),
+  usageCount: integer('usage_count').default(0),
+  lastUsed: timestamp('last_used').defaultNow(),
   createdAt: timestamp('created_at').defaultNow()
 });
 

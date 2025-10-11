@@ -404,7 +404,7 @@ async function processCompressionJob(
     });
   }
 }
-import { setupAuth, isAuthenticated } from "./replitAuth";
+import { setupAuth, isAuthenticated } from "./auth";
 import { 
   // createRazorpayOrder, // DISABLED: Razorpay not needed
   // verifyRazorpayPayment, // DISABLED: Razorpay not needed
@@ -575,7 +575,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Setup authentication middleware first
- // await setupAuth(app);
+  await setupAuth(app);
 
   // Add automatic subscription tier access control middleware
   app.use(subscriptionTierAccessControl);

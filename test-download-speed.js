@@ -2,7 +2,7 @@ import axios from 'axios';
 import fs from 'fs/promises';
 import { performance } from 'perf_hooks';
 
-const API_BASE = 'http://localhost:3000';
+const API_BASE = 'http://localhost:5000';
 
 async function testDownloadSpeed() {
   console.log('🏎️ DOWNLOAD SPEED TEST');
