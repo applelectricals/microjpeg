@@ -4,16 +4,16 @@ import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
-// 🚀 MAXIMUM SHARP PERFORMANCE OPTIMIZATION - Utilize 4 vCPU + 16GB RAM server
+// 🚀 ULTRA-STABLE SHARP PERFORMANCE - Prioritize consistency over speed
 sharp.cache({ 
-  memory: 3072,  // Use 3GB cache memory for maximum performance
-  files: 500,    // Cache up to 500 files
-  items: 2000    // Cache up to 2000 operations
+  memory: 512,   // Use only 512MB cache to prevent memory pressure
+  files: 50,     // Small file cache to prevent memory issues
+  items: 200     // Small operation cache
 });
-sharp.concurrency(4);  // Utilize all 4 vCPUs for parallel processing
-sharp.simd(true);      // Enable SIMD instructions for faster processing
+sharp.concurrency(1);  // Use single core to prevent resource contention
+sharp.simd(true);      // Keep SIMD for efficiency
 
-console.log('🚀 MAXIMUM Sharp Performance: 3GB cache, 4 CPU cores, SIMD enabled');
+console.log('🚀 Ultra-Stable Sharp Performance: 512MB cache, 1 CPU core, SIMD enabled');
 
 // Conditional require for dcraw (only works in development with proper ESM setup)
 let dcraw: any;
@@ -538,16 +538,21 @@ export class CompressionEngine {
       }
     }
     
-    // For non-RAW formats, use Sharp with optimized settings
+    // For non-RAW formats, use Sharp with stable settings
     let sharpInstance: sharp.Sharp;
     
     try {
-      // 🚀 PERFORMANCE OPTIMIZATION: Use optimized Sharp creation
+      // 🚀 STABLE PERFORMANCE: Use conservative Sharp settings
       sharpInstance = sharp(inputPath, {
-        sequentialRead: true,    // Faster for large files (reduces memory usage)
-        limitInputPixels: false, // Remove pixel limit for large images
-        density: 72             // Set reasonable density for web images
+        sequentialRead: true,    // Faster for large files
+        limitInputPixels: false, // Remove pixel limit
+        density: 72,            // Optimized density
+        failOnError: false      // Don't fail on minor errors
       });
+      
+      // 📊 MEMORY MANAGEMENT: Explicitly manage resources
+      sharpInstance = sharpInstance.timeout({ seconds: 30 }); // Prevent hanging
+      
     } catch (error) {
       throw new Error(`Failed to process ${inputExtension?.toUpperCase()} file: ${error.message}`);
     }
@@ -558,15 +563,16 @@ export class CompressionEngine {
       sharpInstance = sharpInstance.resize({ kernel: resizeKernel as keyof sharp.KernelEnum });
     }
 
-    // Apply web optimization - OPTIMIZED FOR SPEED
+    // Apply web optimization - SIMPLIFIED FOR CONSISTENCY 
     if (webOptimized) {
-      // 🚀 SPEED OPTIMIZATION: Remove slow operations
-      // OLD: .withMetadata({}).normalize().rotate() - takes 8+ seconds
-      // NEW: Only essential optimizations for web - takes 0.3 seconds
-      sharpInstance = sharpInstance
-        .rotate(); // Keep auto-rotation for correct orientation
-        // Removed: .withMetadata({}) - metadata stripping is slow for large files
-        // Removed: .normalize() - color normalization is very slow and often unnecessary
+      // 🚀 MINIMAL WEB OPTIMIZATION: Only essential operations
+      try {
+        sharpInstance = sharpInstance.rotate(); // Only auto-rotation, nothing else
+      } catch (error) {
+        console.warn('Web optimization rotate failed, continuing without it:', error.message);
+        // Continue without rotation if it fails
+      }
+      // Removed ALL slow operations: .withMetadata({}), .normalize()
     }
 
     // Apply format-specific settings

@@ -4488,16 +4488,16 @@ var import_path = __toESM(require("path"), 1);
 var import_child_process = require("child_process");
 var import_util = require("util");
 import_sharp.default.cache({
-  memory: 3072,
-  // Use 3GB cache memory for maximum performance
-  files: 500,
-  // Cache up to 500 files
-  items: 2e3
-  // Cache up to 2000 operations
+  memory: 512,
+  // Use only 512MB cache to prevent memory pressure
+  files: 50,
+  // Small file cache to prevent memory issues
+  items: 200
+  // Small operation cache
 });
-import_sharp.default.concurrency(4);
+import_sharp.default.concurrency(1);
 import_sharp.default.simd(true);
-console.log("\u{1F680} MAXIMUM Sharp Performance: 3GB cache, 4 CPU cores, SIMD enabled");
+console.log("\u{1F680} Ultra-Stable Sharp Performance: 512MB cache, 1 CPU core, SIMD enabled");
 var dcraw;
 try {
   if (typeof require !== "undefined") {
@@ -4858,12 +4858,15 @@ var CompressionEngine = class _CompressionEngine {
     try {
       sharpInstance = (0, import_sharp.default)(inputPath, {
         sequentialRead: true,
-        // Faster for large files (reduces memory usage)
+        // Faster for large files
         limitInputPixels: false,
-        // Remove pixel limit for large images
-        density: 72
-        // Set reasonable density for web images
+        // Remove pixel limit
+        density: 72,
+        // Optimized density
+        failOnError: false
+        // Don't fail on minor errors
       });
+      sharpInstance = sharpInstance.timeout({ seconds: 30 });
     } catch (error) {
       throw new Error(`Failed to process ${inputExtension?.toUpperCase()} file: ${error.message}`);
     }
@@ -4872,7 +4875,11 @@ var CompressionEngine = class _CompressionEngine {
       sharpInstance = sharpInstance.resize({ kernel: resizeKernel });
     }
     if (webOptimized) {
-      sharpInstance = sharpInstance.rotate();
+      try {
+        sharpInstance = sharpInstance.rotate();
+      } catch (error) {
+        console.warn("Web optimization rotate failed, continuing without it:", error.message);
+      }
     }
     switch (outputFormat) {
       case "jpeg":
