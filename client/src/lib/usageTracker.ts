@@ -238,7 +238,7 @@ export function resetUsage(): DailyUsage {
 
 // Check if it's a conversion request (format change)
 export function isConversionRequest(originalFormat: string, outputFormat: string): boolean {
-  if (!outputFormat || outputFormat === 'keep-original') {
+  if (!originalFormat || !outputFormat || outputFormat === 'keep-original') {
     return false;
   }
   

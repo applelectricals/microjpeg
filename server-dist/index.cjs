@@ -58,16 +58,34 @@ __export(schema_exports, {
   userUsage: () => userUsage,
   users: () => users
 });
-var import_pg_core, users, sessions, apiKeys, uploads, compressionJobs, leadMagnetSignups, conversions, fileProcessing, pageUsage, rewardTransactions, socialShares, userReferrals, userRewards, adminAuditLogs, appSettings, operationLog2, userUsage, paymentTransactions, apiUsage, apiCompressRequestSchema, createApiKeySchema, anonymousSessionScopes, loginSchema, signupSchema, specialFormatTrials;
+var import_pg_core, import_zod, loginSchema, signupSchema, users, sessions, apiKeys, uploads, compressionJobs, leadMagnetSignups, conversions, fileProcessing, pageUsage, rewardTransactions, socialShares, userReferrals, userRewards, adminAuditLogs, appSettings, operationLog2, userUsage, paymentTransactions, apiUsage, apiCompressRequestSchema, createApiKeySchema, anonymousSessionScopes, specialFormatTrials;
 var init_schema = __esm({
   "shared/schema.ts"() {
     "use strict";
     import_pg_core = require("drizzle-orm/pg-core");
+    import_zod = require("zod");
+    loginSchema = import_zod.z.object({
+      email: import_zod.z.string().email("Invalid email address"),
+      password: import_zod.z.string().min(6, "Password must be at least 6 characters")
+    });
+    signupSchema = import_zod.z.object({
+      email: import_zod.z.string().email("Invalid email address"),
+      password: import_zod.z.string().min(6, "Password must be at least 6 characters"),
+      firstName: import_zod.z.string().min(1, "First name is required"),
+      lastName: import_zod.z.string().min(1, "Last name is required")
+    });
     users = (0, import_pg_core.pgTable)("users", {
       id: (0, import_pg_core.serial)("id").primaryKey(),
-      email: (0, import_pg_core.varchar)("email", { length: 255 }),
-      password: (0, import_pg_core.varchar)("password", { length: 255 }),
-      createdAt: (0, import_pg_core.timestamp)("created_at").defaultNow()
+      email: (0, import_pg_core.varchar)("email", { length: 255 }).notNull().unique(),
+      password: (0, import_pg_core.varchar)("password", { length: 255 }).notNull(),
+      firstName: (0, import_pg_core.varchar)("first_name", { length: 255 }),
+      lastName: (0, import_pg_core.varchar)("last_name", { length: 255 }),
+      subscriptionTier: (0, import_pg_core.varchar)("subscription_tier", { length: 50 }).default("free"),
+      lastLogin: (0, import_pg_core.timestamp)("last_login"),
+      emailVerified: (0, import_pg_core.boolean)("email_verified").default(false),
+      emailVerificationToken: (0, import_pg_core.varchar)("email_verification_token", { length: 255 }),
+      createdAt: (0, import_pg_core.timestamp)("created_at").defaultNow(),
+      updatedAt: (0, import_pg_core.timestamp)("updated_at").defaultNow()
     });
     sessions = (0, import_pg_core.pgTable)("sessions", {
       id: (0, import_pg_core.serial)("id").primaryKey(),
@@ -267,28 +285,13 @@ var init_schema = __esm({
       status: (0, import_pg_core.varchar)("status", { length: 50 }),
       createdAt: (0, import_pg_core.timestamp)("created_at").defaultNow()
     });
-    loginSchema = (0, import_pg_core.pgTable)("login_Schema", {
-      id: (0, import_pg_core.serial)("id").primaryKey(),
-      referrerId: (0, import_pg_core.integer)("referrer_id"),
-      referredId: (0, import_pg_core.integer)("referred_id"),
-      code: (0, import_pg_core.varchar)("code", { length: 100 }),
-      status: (0, import_pg_core.varchar)("status", { length: 50 }),
-      createdAt: (0, import_pg_core.timestamp)("created_at").defaultNow()
-    });
-    signupSchema = (0, import_pg_core.pgTable)("signup_Schema", {
-      id: (0, import_pg_core.serial)("id").primaryKey(),
-      referrerId: (0, import_pg_core.integer)("referrer_id"),
-      referredId: (0, import_pg_core.integer)("referred_id"),
-      code: (0, import_pg_core.varchar)("code", { length: 100 }),
-      status: (0, import_pg_core.varchar)("status", { length: 50 }),
-      createdAt: (0, import_pg_core.timestamp)("created_at").defaultNow()
-    });
     specialFormatTrials = (0, import_pg_core.pgTable)("special_FormatTrials", {
       id: (0, import_pg_core.serial)("id").primaryKey(),
-      referrerId: (0, import_pg_core.integer)("referrer_id"),
-      referredId: (0, import_pg_core.integer)("referred_id"),
-      code: (0, import_pg_core.varchar)("code", { length: 100 }),
-      status: (0, import_pg_core.varchar)("status", { length: 50 }),
+      ipAddress: (0, import_pg_core.varchar)("ip_address", { length: 255 }).notNull(),
+      userAgent: (0, import_pg_core.varchar)("user_agent", { length: 500 }),
+      browserFingerprint: (0, import_pg_core.varchar)("browser_fingerprint", { length: 255 }),
+      usageCount: (0, import_pg_core.integer)("usage_count").default(0),
+      lastUsed: (0, import_pg_core.timestamp)("last_used").defaultNow(),
       createdAt: (0, import_pg_core.timestamp)("created_at").defaultNow()
     });
   }
@@ -1723,7 +1726,7 @@ var init_userLimits = __esm({
 // server/index.prod.ts
 var import_config = require("dotenv/config");
 var import_express8 = __toESM(require("express"), 1);
-var import_express_session3 = __toESM(require("express-session"), 1);
+var import_express_session2 = __toESM(require("express-session"), 1);
 var import_cors = __toESM(require("cors"), 1);
 
 // server/routes.ts
@@ -6550,14 +6553,14 @@ var ADMIN_UI_ENABLED = process.env.ADMIN_UI_ENABLED === "true";
 var ADMIN_SEED_TOKEN = process.env.ADMIN_SEED_TOKEN || "dev-seed-token-2025";
 var ensureSuperuser = async (req, res, next) => {
   try {
-    const session4 = req.session;
-    if (!session4.userId) {
+    const session3 = req.session;
+    if (!session3.userId) {
       return res.status(401).json({
         error: "Authentication required",
         message: "Please sign in to access admin functions"
       });
     }
-    const [user] = await db.select().from(users).where((0, import_drizzle_orm3.eq)(users.id, session4.userId));
+    const [user] = await db.select().from(users).where((0, import_drizzle_orm3.eq)(users.id, session3.userId));
     if (!user || !user.isSuperuser) {
       return res.status(403).json({
         error: "Insufficient privileges",
@@ -6649,16 +6652,16 @@ async function updateAppSettings(updates, updatedBy) {
 }
 async function hasSuperuserBypass(req) {
   try {
-    const session4 = req.session;
-    if (!session4?.superBypassEnabled) {
+    const session3 = req.session;
+    if (!session3?.superBypassEnabled) {
       return false;
     }
-    if (!session4.userId) {
+    if (!session3.userId) {
       return false;
     }
-    const [user] = await db.select().from(users).where((0, import_drizzle_orm3.eq)(users.id, session4.userId));
+    const [user] = await db.select().from(users).where((0, import_drizzle_orm3.eq)(users.id, session3.userId));
     if (!user || !user.isSuperuser) {
-      console.warn(`\u{1F6A8} Session ${session4.userId} has bypass enabled but user is not superuser`);
+      console.warn(`\u{1F6A8} Session ${session3.userId} has bypass enabled but user is not superuser`);
       return false;
     }
     const appSettings2 = await getAppSettings();
@@ -6672,12 +6675,12 @@ async function hasSuperuserBypass(req) {
   }
 }
 function setSuperuserBypass(req, enabled, reason) {
-  const session4 = req.session;
-  session4.superBypassEnabled = enabled;
+  const session3 = req.session;
+  session3.superBypassEnabled = enabled;
   if (enabled && reason) {
-    session4.superBypassReason = reason;
+    session3.superBypassReason = reason;
   } else {
-    delete session4.superBypassReason;
+    delete session3.superBypassReason;
   }
 }
 
@@ -6890,8 +6893,8 @@ var planGatingMiddleware = async (req, res, next) => {
   req.autoOutputFormat = pageConfig.autoOutput;
   req.allowedOutputFormats = [...pageConfig.allowedOutputs];
   if (pageConfig.requiresAuth) {
-    const session4 = req.session;
-    if (!session4?.userId) {
+    const session3 = req.session;
+    if (!session3?.userId) {
       return res.status(401).json({
         error: "Authentication required",
         message: "Please sign in to access this plan",
@@ -6900,9 +6903,9 @@ var planGatingMiddleware = async (req, res, next) => {
     }
   }
   if (pageConfig.requiresPayment) {
-    const session4 = req.session;
+    const session3 = req.session;
     const hasValidPayment = await checkPaymentStatus(
-      session4?.userId,
+      session3?.userId,
       pageConfig.paymentAmount,
       pageConfig.planName
     );
@@ -6914,8 +6917,8 @@ var planGatingMiddleware = async (req, res, next) => {
       });
     }
     if (pageConfig.planName === "test-premium") {
-      const session5 = req.session;
-      const paymentDate = session5?.paymentDate;
+      const session4 = req.session;
+      const paymentDate = session4?.paymentDate;
       if (paymentDate) {
         const hoursSincePayment = (Date.now() - new Date(paymentDate).getTime()) / (1e3 * 60 * 60);
         if (hoursSincePayment >= 24) {
@@ -6928,8 +6931,8 @@ var planGatingMiddleware = async (req, res, next) => {
       }
     }
     if (pageConfig.planName === "premium" || pageConfig.planName === "enterprise") {
-      const session5 = req.session;
-      const planExpiry = session5?.planExpiry;
+      const session4 = req.session;
+      const planExpiry = session4?.planExpiry;
       if (planExpiry && new Date(planExpiry) < /* @__PURE__ */ new Date()) {
         return res.status(403).json({
           error: "Subscription expired",
@@ -7007,8 +7010,8 @@ var conversionValidationMiddleware = async (req, res, next) => {
     }
   }
   const sessionId = req.sessionID;
-  const session4 = req.session;
-  const userId2 = session4?.userId;
+  const session3 = req.session;
+  const userId2 = session3?.userId;
   const identifier = req.pageIdentifier || req.path;
   try {
     let userType = "anonymous";
@@ -7023,7 +7026,7 @@ var conversionValidationMiddleware = async (req, res, next) => {
       auditContext = {
         adminUserId: userId2,
         superBypass: true,
-        bypassReason: session4.superBypassReason || "admin_testing",
+        bypassReason: session3.superBypassReason || "admin_testing",
         ipAddress: req.ip,
         userAgent: req.get("User-Agent")
       };
@@ -7164,12 +7167,12 @@ init_db();
 init_schema();
 var subscriptionTierAccessControl = async (req, res, next) => {
   try {
-    const session4 = req.session;
+    const session3 = req.session;
     const path7 = req.path;
-    if (!session4?.userId) {
+    if (!session3?.userId) {
       return next();
     }
-    const [user] = await db.select({ subscriptionTier: users.subscriptionTier, subscriptionStatus: users.subscriptionStatus }).from(users).where((0, import_drizzle_orm4.eq)(users.id, session4.userId)).limit(1);
+    const [user] = await db.select({ subscriptionTier: users.subscriptionTier, subscriptionStatus: users.subscriptionStatus }).from(users).where((0, import_drizzle_orm4.eq)(users.id, session3.userId)).limit(1);
     if (!user) {
       return next();
     }
@@ -7221,12 +7224,12 @@ var subscriptionTierAccessControl = async (req, res, next) => {
 };
 var tierBasedRouting = async (req, res, next) => {
   try {
-    const session4 = req.session;
+    const session3 = req.session;
     const path7 = req.path;
-    if (!session4?.userId || !["/", "/dashboard", "/home"].includes(path7)) {
+    if (!session3?.userId || !["/", "/dashboard", "/home"].includes(path7)) {
       return next();
     }
-    const [user] = await db.select({ subscriptionTier: users.subscriptionTier, subscriptionStatus: users.subscriptionStatus }).from(users).where((0, import_drizzle_orm4.eq)(users.id, session4.userId)).limit(1);
+    const [user] = await db.select({ subscriptionTier: users.subscriptionTier, subscriptionStatus: users.subscriptionStatus }).from(users).where((0, import_drizzle_orm4.eq)(users.id, session3.userId)).limit(1);
     if (!user) {
       return next();
     }
@@ -7251,12 +7254,12 @@ var tierBasedRouting = async (req, res, next) => {
 };
 var apiTierAccessControl = async (req, res, next) => {
   try {
-    const session4 = req.session;
+    const session3 = req.session;
     const path7 = req.path;
-    if (!path7.startsWith("/api/") || !session4?.userId) {
+    if (!path7.startsWith("/api/") || !session3?.userId) {
       return next();
     }
-    const [user] = await db.select({ subscriptionTier: users.subscriptionTier, subscriptionStatus: users.subscriptionStatus }).from(users).where((0, import_drizzle_orm4.eq)(users.id, session4.userId)).limit(1);
+    const [user] = await db.select({ subscriptionTier: users.subscriptionTier, subscriptionStatus: users.subscriptionStatus }).from(users).where((0, import_drizzle_orm4.eq)(users.id, session3.userId)).limit(1);
     if (!user) {
       return next();
     }
@@ -7300,58 +7303,61 @@ var apiTierAccessControl = async (req, res, next) => {
   }
 };
 
-// server/replitAuth.ts
-var client = __toESM(require("openid-client"), 1);
-var import_passport = require("openid-client/passport");
-var import_passport2 = __toESM(require("passport"), 1);
+// server/auth.ts
+var import_bcryptjs2 = __toESM(require("bcryptjs"), 1);
 var import_express_session = __toESM(require("express-session"), 1);
-var import_memoizee = __toESM(require("memoizee"), 1);
 var import_connect_pg_simple = __toESM(require("connect-pg-simple"), 1);
-if (!process.env.REPLIT_DOMAINS) {
-  console.warn("REPLIT_DOMAINS not provided - Replit authentication will be disabled");
+function getSession() {
+  const sessionTtl = 7 * 24 * 60 * 60 * 1e3;
+  const pgStore = (0, import_connect_pg_simple.default)(import_express_session.default);
+  const sessionStore = new pgStore({
+    conString: process.env.DATABASE_URL,
+    createTableIfMissing: true,
+    ttl: sessionTtl,
+    tableName: "sessions"
+  });
+  return (0, import_express_session.default)({
+    secret: process.env.SESSION_SECRET || "your-secret-key-change-in-production",
+    store: sessionStore,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      secure: process.env.SESSION_SECURE_COOKIE === "true",
+      maxAge: sessionTtl
+    }
+  });
 }
-var getOidcConfig = (0, import_memoizee.default)(
-  async () => {
-    return await client.discovery(
-      new URL(process.env.ISSUER_URL ?? "https://replit.com/oidc"),
-      process.env.REPL_ID
-    );
-  },
-  { maxAge: 3600 * 1e3 }
-);
-function updateUserSession(user, tokens) {
-  user.claims = tokens.claims();
-  user.access_token = tokens.access_token;
-  user.refresh_token = tokens.refresh_token;
-  user.expires_at = user.claims?.exp;
+function setupAuth(app2) {
+  app2.set("trust proxy", 1);
+  app2.use(getSession());
 }
 var isAuthenticated = async (req, res, next) => {
-  if (!process.env.REPLIT_DOMAINS) {
-    return next();
-  }
-  const user = req.user;
-  if (!req.isAuthenticated() || !user.expires_at) {
+  const session3 = req.session;
+  if (!session3.userId) {
     return res.status(401).json({ message: "Unauthorized" });
   }
-  const now = Math.floor(Date.now() / 1e3);
-  if (now <= user.expires_at) {
-    return next();
-  }
-  const refreshToken = user.refresh_token;
-  if (!refreshToken) {
-    res.status(401).json({ message: "Unauthorized" });
-    return;
-  }
   try {
-    const config = await getOidcConfig();
-    const tokenResponse = await client.refreshTokenGrant(config, refreshToken);
-    updateUserSession(user, tokenResponse);
-    return next();
+    const user = await storage.getUser(session3.userId);
+    if (!user) {
+      req.session.destroy(() => {
+      });
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    req.user = user;
+    next();
   } catch (error) {
+    console.error("Authentication error:", error);
     res.status(401).json({ message: "Unauthorized" });
-    return;
   }
 };
+async function hashPassword(password) {
+  const saltRounds = 12;
+  return import_bcryptjs2.default.hash(password, saltRounds);
+}
+async function verifyPassword(password, hashedPassword) {
+  return import_bcryptjs2.default.compare(password, hashedPassword);
+}
 
 // server/payment.ts
 init_db();
@@ -7514,7 +7520,7 @@ if (manualEnv === "live" || manualEnv === "production") {
   const startsWithBAA = PAYPAL_CLIENT_ID.startsWith("BAA");
   isLiveEnvironment = startsWithBAA;
 }
-var client2 = new import_paypal_server_sdk.Client({
+var client = new import_paypal_server_sdk.Client({
   clientCredentialsAuthCredentials: {
     oAuthClientId: PAYPAL_CLIENT_ID,
     oAuthClientSecret: PAYPAL_CLIENT_SECRET
@@ -7531,8 +7537,8 @@ var client2 = new import_paypal_server_sdk.Client({
     }
   }
 });
-var ordersController = new import_paypal_server_sdk.OrdersController(client2);
-var oAuthAuthorizationController = new import_paypal_server_sdk.OAuthAuthorizationController(client2);
+var ordersController = new import_paypal_server_sdk.OrdersController(client);
+var oAuthAuthorizationController = new import_paypal_server_sdk.OAuthAuthorizationController(client);
 async function getClientToken() {
   const auth = Buffer.from(
     `${PAYPAL_CLIENT_ID}:${PAYPAL_CLIENT_SECRET}`
@@ -7606,37 +7612,6 @@ async function loadPaypalDefault(req, res) {
     isLiveMode: isLiveEnvironment
     // Tell frontend which environment to use
   });
-}
-
-// server/auth.ts
-var import_bcryptjs2 = __toESM(require("bcryptjs"), 1);
-var import_express_session2 = __toESM(require("express-session"), 1);
-var import_connect_pg_simple2 = __toESM(require("connect-pg-simple"), 1);
-var isAuthenticated2 = async (req, res, next) => {
-  const session4 = req.session;
-  if (!session4.userId) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-  try {
-    const user = await storage.getUser(session4.userId);
-    if (!user) {
-      req.session.destroy(() => {
-      });
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-    req.user = user;
-    next();
-  } catch (error) {
-    console.error("Authentication error:", error);
-    res.status(401).json({ message: "Unauthorized" });
-  }
-};
-async function hashPassword(password) {
-  const saltRounds = 12;
-  return import_bcryptjs2.default.hash(password, saltRounds);
-}
-async function verifyPassword(password, hashedPassword) {
-  return import_bcryptjs2.default.compare(password, hashedPassword);
 }
 
 // server/routes.ts
@@ -9295,12 +9270,12 @@ async function handleSubscriptionUpdated(subscription) {
 // server/apiManagement.ts
 var import_express4 = require("express");
 init_schema();
-var import_zod = require("zod");
+var import_zod2 = require("zod");
 init_db();
 init_schema();
 var import_drizzle_orm8 = require("drizzle-orm");
 var router4 = (0, import_express4.Router)();
-router4.get("/keys", isAuthenticated2, async (req, res) => {
+router4.get("/keys", isAuthenticated, async (req, res) => {
   try {
     const userId2 = req.user.id;
     const userApiKeys = await db.select({
@@ -9332,7 +9307,7 @@ router4.get("/keys", isAuthenticated2, async (req, res) => {
     });
   }
 });
-router4.post("/keys", isAuthenticated2, async (req, res) => {
+router4.post("/keys", isAuthenticated, async (req, res) => {
   try {
     const userId2 = req.user.id;
     const parseResult = createApiKeySchema.safeParse(req.body);
@@ -9384,15 +9359,15 @@ router4.post("/keys", isAuthenticated2, async (req, res) => {
     });
   }
 });
-router4.put("/keys/:keyId", isAuthenticated2, async (req, res) => {
+router4.put("/keys/:keyId", isAuthenticated, async (req, res) => {
   try {
     const userId2 = req.user.id;
     const keyId = req.params.keyId;
-    const updateSchema = import_zod.z.object({
-      name: import_zod.z.string().min(1).max(50).optional(),
-      permissions: import_zod.z.array(import_zod.z.enum(["compress", "convert", "batch", "webhook"])).optional(),
-      rateLimit: import_zod.z.number().min(100).max(1e4).optional(),
-      isActive: import_zod.z.boolean().optional()
+    const updateSchema = import_zod2.z.object({
+      name: import_zod2.z.string().min(1).max(50).optional(),
+      permissions: import_zod2.z.array(import_zod2.z.enum(["compress", "convert", "batch", "webhook"])).optional(),
+      rateLimit: import_zod2.z.number().min(100).max(1e4).optional(),
+      isActive: import_zod2.z.boolean().optional()
     });
     const parseResult = updateSchema.safeParse(req.body);
     if (!parseResult.success) {
@@ -9437,7 +9412,7 @@ router4.put("/keys/:keyId", isAuthenticated2, async (req, res) => {
     });
   }
 });
-router4.delete("/keys/:keyId", isAuthenticated2, async (req, res) => {
+router4.delete("/keys/:keyId", isAuthenticated, async (req, res) => {
   try {
     const userId2 = req.user.id;
     const keyId = req.params.keyId;
@@ -9463,7 +9438,7 @@ router4.delete("/keys/:keyId", isAuthenticated2, async (req, res) => {
     });
   }
 });
-router4.get("/keys/:keyId/usage", isAuthenticated2, async (req, res) => {
+router4.get("/keys/:keyId/usage", isAuthenticated, async (req, res) => {
   try {
     const userId2 = req.user.id;
     const keyId = req.params.keyId;
@@ -10261,6 +10236,7 @@ async function registerRoutes(app2) {
     }
     next();
   });
+  await setupAuth(app2);
   app2.use(subscriptionTierAccessControl);
   app2.use(tierBasedRouting);
   app2.use("/api", apiTierAccessControl);
@@ -14793,9 +14769,9 @@ function registerResetEndpoints(app2) {
   });
   app2.get("/api/admin/status", ensureSuperuser, async (req, res) => {
     try {
-      const session4 = req.session;
-      const bypassEnabled = session4?.superBypassEnabled === true;
-      const bypassReason = session4?.superBypassReason;
+      const session3 = req.session;
+      const bypassEnabled = session3?.superBypassEnabled === true;
+      const bypassReason = session3?.superBypassReason;
       const appSettings2 = await getAppSettings();
       res.json({
         success: true,
@@ -15015,7 +14991,7 @@ app.use((0, import_cors.default)({
 app.use(import_express8.default.json({ limit: "200mb" }));
 app.use(import_express8.default.urlencoded({ extended: false, limit: "200mb" }));
 app.use(
-  (0, import_express_session3.default)({
+  (0, import_express_session2.default)({
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: true,

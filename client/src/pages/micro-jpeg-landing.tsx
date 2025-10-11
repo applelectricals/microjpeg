@@ -317,34 +317,6 @@ const trackSocialShare = async (platform: string) => {
 
 // Results sharing function - shares actual compression results (moved inside component for session access)
 
-// Helper function to check if format conversion is needed
-const isConversionRequest = (originalFormat: string, targetFormat: string): boolean => {
-  // Normalize formats (remove dots and convert to lowercase)
-  const normalizeFormat = (format: string) => format.replace('.', '').toLowerCase();
-  const original = normalizeFormat(originalFormat);
-  const target = normalizeFormat(targetFormat);
-  
-  // If target is 'keep-original' or same as original, no conversion needed
-  if (target === 'keep-original' || target === original) {
-    return false;
-  }
-  
-  // Format aliases mapping
-  const formatAliases: { [key: string]: string } = {
-    'jpg': 'jpeg',
-    'jpeg': 'jpeg',
-    'png': 'png',
-    'webp': 'webp',
-    'avif': 'avif'
-  };
-  
-  const normalizedOriginal = formatAliases[original] || original;
-  const normalizedTarget = formatAliases[target] || target;
-  
-  // Return true if formats are different (conversion needed)
-  return normalizedOriginal !== normalizedTarget;
-};
-
 export default function MicroJPEGLanding() {
   const { isAuthenticated, user } = useAuth();
 
@@ -779,7 +751,7 @@ export default function MicroJPEGLanding() {
         
         // Also record conversions for RAW files and format changes
         const conversionCount = data.results.filter((result: CompressionResult) => 
-          result.wasConverted || isConversionRequest(result.originalFormat, result.outputFormat)
+          result.wasConverted || (result.originalFormat && result.outputFormat && isConversionRequest(result.originalFormat, result.outputFormat))
         ).length;
         
         if (conversionCount > 0) {
@@ -1030,7 +1002,7 @@ export default function MicroJPEGLanding() {
         
         // Also record conversions for RAW files and format changes
         const conversionCount = data.results.filter((result: CompressionResult) => 
-          result.wasConverted || isConversionRequest(result.originalFormat, result.outputFormat)
+          result.wasConverted || (result.originalFormat && result.outputFormat && isConversionRequest(result.originalFormat, result.outputFormat))
         ).length;
         
         if (conversionCount > 0) {
