@@ -1497,7 +1497,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const originalStats = await fs.stat(file.path);
           const compressedStats = await fs.stat(outputPath);
           // Calculate compression ratio using original file size
-          const compressionRatio = Math.round((1 - compressedStats.size / originalStats.size) * 100);
+          const compressionRatio = originalStats.size > 0 
+            ? Math.round((1 - compressedStats.size / originalStats.size) * 100)
+            : 0; // Prevent NaN when original size is 0
           
           // ✅ OPTIMIZATION: Collect job updates for batch execution
           const jobUpdate = storage.updateCompressionJob(job.id, {
@@ -1774,7 +1776,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Update job
           const originalStats = await fs.stat(cached.originalPath);
           const compressedStats = await fs.stat(outputPath);
-          const compressionRatio = Math.round((1 - compressedStats.size / originalStats.size) * 100);
+          const compressionRatio = originalStats.size > 0 
+            ? Math.round((1 - compressedStats.size / originalStats.size) * 100)
+            : 0; // Prevent NaN when original size is 0
           
           await storage.updateCompressionJob(job.id, {
             status: "completed",
@@ -5985,28 +5989,58 @@ async function processSpecialFormatConversion(
   try {
     // Handle different input formats
     if (inputFormat === 'raw') {
-      // For RAW files, use dcraw to extract to PPM, then convert with ImageMagick
-      // This bypasses ImageMagick's TIFF parsing issues with RAW files
-      console.log(`Converting RAW file ${inputPath} to ${outputFormat} using dcraw_emu + ImageMagick...`);
+      console.log(`Converting RAW file ${inputPath} to ${outputFormat}...`);
       
       // Verify input file exists before conversion
       const inputExists = await fs.access(inputPath).then(() => true).catch(() => false);
       console.log(`Input file exists: ${inputExists}`);
       
-      // Step 1: Use dcraw_emu (from libraw) to extract RAW to PPM format (uncompressed RGB)
-      const tempPpmPath = inputPath + '_temp.ppm';
-      const dcrawCommand = `dcraw_emu -w -T "${inputPath}"`;
-      console.log(`Running dcraw_emu command: ${dcrawCommand}`);
-      await execAsync(dcrawCommand);
-      
-      // dcraw_emu creates a .tiff file with the same base name
-      const baseName = inputPath.replace(/\.[^/.]+$/, "");
-      const tempTiffPath = baseName + '.tiff';
-      console.log(`Expected TIFF output: ${tempTiffPath}`);
-      
-      // Verify TIFF file was created
-      const tiffExists = await fs.access(tempTiffPath).then(() => true).catch(() => false);
-      console.log(`TIFF file created: ${tiffExists}`);
+      try {
+        // First, try using dcraw_emu (external command) for best compatibility
+        console.log(`Attempting RAW conversion using dcraw_emu + ImageMagick...`);
+        
+        // Step 1: Use dcraw_emu (from libraw) to extract RAW to TIFF format
+        const dcrawCommand = `dcraw_emu -w -T "${inputPath}"`;
+        console.log(`Running dcraw_emu command: ${dcrawCommand}`);
+        await execAsync(dcrawCommand);
+        
+        // dcraw_emu creates a .tiff file with the same base name
+        const baseName = inputPath.replace(/\.[^/.]+$/, "");
+        const tempTiffPath = baseName + '.tiff';
+        console.log(`Expected TIFF output: ${tempTiffPath}`);
+        
+        // Verify TIFF file was created
+        const tiffExists = await fs.access(tempTiffPath).then(() => true).catch(() => false);
+        if (!tiffExists) {
+          throw new Error('dcraw_emu did not create expected TIFF file');
+        }
+        
+        console.log(`✅ dcraw_emu conversion successful, proceeding with ImageMagick...`);
+        
+        // Continue with existing ImageMagick processing logic...
+        
+      } catch (dcrawEmuError) {
+        console.log(`⚠️ dcraw_emu failed: ${dcrawEmuError.message}`);
+        console.log(`🔄 Falling back to Node.js dcraw package...`);
+        
+        try {
+          // Fallback: Use Node.js dcraw package from CompressionEngine
+          await CompressionEngine.processRawWithDcraw(inputPath, outputPath, outputFormat, {
+            quality: options.quality || 80,
+            width: options.width,
+            height: options.height
+          });
+          
+          console.log(`✅ RAW conversion completed using Node.js dcraw fallback`);
+          return { finalSize: (await fs.stat(outputPath)).size };
+          
+        } catch (dcrawNodeError) {
+          console.error(`❌ Both dcraw_emu and Node.js dcraw failed:`);
+          console.error(`dcraw_emu error: ${dcrawEmuError.message}`);
+          console.error(`dcraw package error: ${dcrawNodeError.message}`);
+          throw new Error(`Failed to convert raw to ${outputFormat}: ${dcrawNodeError.message}`);
+        }
+      }
       
       // Step 2: Convert TIFF to final format using ImageMagick with compression
       let convertCommand;

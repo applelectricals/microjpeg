@@ -16,14 +16,23 @@ sharp.simd(true);      // Keep SIMD for efficiency
 console.log('🚀 Ultra-Stable Sharp Performance: 512MB cache, 1 CPU core, SIMD enabled');
 
 // Conditional require for dcraw (only works in development with proper ESM setup)
-let dcraw: any;
-try {
-  if (typeof require !== 'undefined') {
-    dcraw = require('dcraw');
+let dcraw: any = null;
+
+// Function to load dcraw dynamically
+async function loadDcraw() {
+  if (dcraw === null) {
+    try {
+      // Use createRequire for ES modules compatibility
+      const { createRequire } = await import('module');
+      const require = createRequire(import.meta.url);
+      dcraw = require('dcraw');
+      console.log('✅ dcraw package loaded successfully');
+    } catch (error) {
+      console.log('dcraw not available, RAW processing disabled');
+      dcraw = false; // Mark as failed to avoid retrying
+    }
   }
-} catch (error) {
-  console.log('dcraw not available, RAW processing disabled');
-  dcraw = null;
+  return dcraw;
 }
 
 const execAsync = promisify(exec);
@@ -72,7 +81,9 @@ export class CompressionEngine {
     const { quality = 75, width, height } = options;
     
     try {
-      if (!dcraw) {
+      // Load dcraw dynamically
+      const dcrawModule = await loadDcraw();
+      if (!dcrawModule) {
         throw new Error('dcraw not available in this environment');
       }
       
@@ -100,7 +111,7 @@ export class CompressionEngine {
         };
       }
       
-      const result = dcraw(rawBuffer, dcrawOptions);
+      const result = dcrawModule(rawBuffer, dcrawOptions);
       
       if (!result || result.length === 0) {
         throw new Error('dcraw processing returned empty result');

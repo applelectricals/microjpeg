@@ -29,7 +29,7 @@ export function useImagePreloader({ imageSources, priority = false }: UseImagePr
           // High priority images should be loaded immediately
           if (priority) {
             img.loading = 'eager';
-            img.fetchPriority = 'high';
+            (img as any).fetchpriority = 'high';
           }
         });
       });
