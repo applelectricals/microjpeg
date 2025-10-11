@@ -1819,7 +1819,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Download endpoint for compressed files by job ID
+  // Download endpoint for compressed files by job ID - OPTIMIZED FOR SPEED
   app.get("/api/download/compressed/:jobId", async (req, res) => {
     try {
       const jobId = req.params.jobId;
@@ -1829,45 +1829,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Compressed file not found" });
       }
       
-      // Generate a user-friendly filename
+      // Generate user-friendly filename
       const originalName = job.originalFilename;
       const outputFormat = job.outputFormat || 'jpeg';
       const extension = outputFormat === 'jpeg' ? '.jpg' : `.${outputFormat}`;
       const baseName = path.parse(originalName).name;
       const downloadName = `${baseName}_compressed${extension}`;
       
-      // Priority 1: If CDN URL is available, redirect to it with download headers
+      // Priority 1: CDN redirect (fastest option)
       if (job.cdnUrl) {
-        console.log(`🌐 Redirecting download to CDN: ${job.cdnUrl}`);
-        // For downloads from CDN, we redirect with appropriate headers
+        console.log(`🌐 CDN redirect: ${job.cdnUrl}`);
         res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`);
-        return res.redirect(302, job.cdnUrl);
+        res.setHeader('Cache-Control', 'public, max-age=86400'); // 24h cache
+        return res.redirect(301, job.cdnUrl); // Permanent redirect for better caching
       }
       
-      // Priority 2: Fallback to local file download
+      // Priority 2: Optimized local file streaming
       if (!job.compressedPath) {
         return res.status(404).json({ error: "Compressed file not found" });
       }
       
-      // Check if local file exists
-      await fs.access(job.compressedPath);
+      // Get file stats efficiently
+      const stats = await fs.stat(job.compressedPath);
       
-      // Set proper headers for download
+      // Set optimized headers
       res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`);
       res.setHeader('Content-Type', 'application/octet-stream');
+      res.setHeader('Content-Length', stats.size.toString());
+      res.setHeader('Cache-Control', 'public, max-age=3600'); // 1h cache
+      res.setHeader('Accept-Ranges', 'bytes'); // Enable resume support
       
-      console.log(`📁 Serving local download: ${job.compressedPath}`);
-      res.download(job.compressedPath, downloadName, (err) => {
-        if (err) {
-          console.error("Download error:", err);
-          if (!res.headersSent) {
-            res.status(404).json({ error: "File not found" });
-          }
-        }
-      });
+      // Handle range requests for resumable downloads
+      const range = req.headers.range;
+      if (range) {
+        const [start, end] = range.replace(/bytes=/, "").split("-").map(Number);
+        const actualEnd = end || stats.size - 1;
+        const contentLength = actualEnd - start + 1;
+        
+        res.status(206);
+        res.setHeader('Content-Range', `bytes ${start}-${actualEnd}/${stats.size}`);
+        res.setHeader('Content-Length', contentLength.toString());
+        
+        const fileStream = createReadStream(job.compressedPath, { 
+          start, 
+          end: actualEnd,
+          highWaterMark: 1024 * 1024 // 1MB chunks for large files
+        });
+        fileStream.pipe(res);
+      } else {
+        // Full file download with optimized streaming
+        const fileStream = createReadStream(job.compressedPath, {
+          highWaterMark: 1024 * 1024 // 1MB chunks (was default 64KB)
+        });
+        fileStream.pipe(res);
+      }
+      
+      console.log(`📁 Optimized download: ${job.compressedPath} (${(stats.size/1024/1024).toFixed(2)}MB)`);
+      
     } catch (error) {
-      console.error("File access error:", error);
-      res.status(404).json({ error: "File not found" });
+      console.error("Download error:", error);
+      if (!res.headersSent) {
+        res.status(404).json({ error: "File not found" });
+      }
     }
   });
 
@@ -1979,10 +2002,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const zipFilename = `microjpeg_batch_compress_${Date.now()}.zip`;
       res.setHeader('Content-Type', 'application/zip');
       res.setHeader('Content-Disposition', `attachment; filename="${zipFilename}"`);
+      res.setHeader('Transfer-Encoding', 'chunked'); // Enable streaming
       
-      // Create zip archive
+      // Create optimized zip archive - SPEED OPTIMIZED
       const archive = archiver('zip', {
-        zlib: { level: 9 } // Best compression
+        zlib: { 
+          level: 6, // Balanced compression (was 9 - too slow!)
+          chunkSize: 64 * 1024 // 64KB chunks
+        },
+        statConcurrency: 4 // Process 4 files concurrently
       });
       
       // Handle archive errors
@@ -4122,9 +4150,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         res.setHeader('Content-Type', contentType);
         res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`);
-        res.setHeader('Content-Length', stats.size);
+        res.setHeader('Content-Length', stats.size.toString());
+        res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+        res.setHeader('Accept-Ranges', 'bytes'); // Enable resume support
         
-        const fileStream = createReadStream(filePath);
+        // Optimized streaming with large chunks
+        const fileStream = createReadStream(filePath, {
+          highWaterMark: 1024 * 1024 // 1MB chunks for faster streaming
+        });
         fileStream.pipe(res);
         
         console.log(`Special format download: ${filePath} (${stats.size} bytes) as ${downloadName}`);
