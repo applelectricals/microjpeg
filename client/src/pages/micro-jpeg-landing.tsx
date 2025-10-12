@@ -11,13 +11,15 @@ import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { apiRequest } from '@/lib/queryClient';
-// Removed redundant usage trackers
+// Removed redundant usage trackers - using DualCounter only
 import { sessionManager } from '@/lib/sessionManager';
-import { canConvert, recordCompression, recordConversion, isConversionRequest } from '@/lib/usageTracker';
+import { canConvert, recordCompression } from '@/lib/usageTracker';
 import Header from '@/components/header';
+import { DualCounter } from '@/components/DualCounter';
+import { useOperationCheck } from '@/hooks/useOperationCheck';
 import { SEOHead } from '@/components/SEOHead';
 import { SEO_CONTENT, STRUCTURED_DATA } from '@/data/seoData';
-import { default as logoUrl } from '@/assets/mascot-logo-small.ts';
+import logoUrl from '@assets/mascot-logo-optimized.png';
 import mascotUrl from '@/assets/mascot.webp';
 import avifIcon from '@/assets/format-icons/avif.jpg';
 import jpegIcon from '@/assets/format-icons/jpeg.jpg';
@@ -317,9 +319,48 @@ const trackSocialShare = async (platform: string) => {
 
 // Results sharing function - shares actual compression results (moved inside component for session access)
 
+// Helper function to check if format conversion is needed
+const isConversionRequest = (originalFormat: string, targetFormat: string): boolean => {
+  // Normalize formats (remove dots and convert to lowercase)
+  const normalizeFormat = (format: string) => format.replace('.', '').toLowerCase();
+  const original = normalizeFormat(originalFormat);
+  const target = normalizeFormat(targetFormat);
+  
+  // If target is 'keep-original' or same as original, no conversion needed
+  if (target === 'keep-original' || target === original) {
+    return false;
+  }
+  
+  // Format aliases mapping
+  const formatAliases: { [key: string]: string } = {
+    'jpg': 'jpeg',
+    'jpeg': 'jpeg',
+    'png': 'png',
+    'webp': 'webp',
+    'avif': 'avif'
+  };
+  
+  const normalizedOriginal = formatAliases[original] || original;
+  const normalizedTarget = formatAliases[target] || target;
+  
+  // Return true if formats are different (conversion needed)
+  return normalizedOriginal !== normalizedTarget;
+};
+
 export default function MicroJPEGLanding() {
   const { isAuthenticated, user } = useAuth();
 
+  // Create helper functions for instant counter updates
+  const updateCounterOptimistically = (increment: number = 1) => {
+    console.log('🚀 Triggering optimistic counter update');
+    window.dispatchEvent(new CustomEvent('optimisticCounterUpdate', { detail: { increment } }));
+  };
+
+  const refreshUniversalCounter = () => {
+    console.log('🔄 Triggering universal counter refresh');
+    window.dispatchEvent(new Event('refreshUniversalCounter'));
+  };
+  
   // Use server usage data instead of local session data
   const [session, setSession] = useState<SessionData>(() => {
     const initialSession = sessionManager.getSession();
@@ -360,14 +401,47 @@ export default function MicroJPEGLanding() {
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const { checkOperation } = useOperationCheck();
 
-  // File validation function - optimized for landing page performance (client-side only)
+  // File validation function - now inside component to access checkOperation hook
   const validateFile = useCallback(async (file: File, isUserAuthenticated: boolean = false): Promise<string | null> => {
-    // Skip API call for performance on landing page - do client-side validation only
-    // const operationCheck = await checkOperation(file, PAGE_IDENTIFIER);
-    // if (!operationCheck.allowed) {
-    //   return operationCheck.reason || 'Operation not allowed';
-    // }
+    // PROACTIVE HOURLY LIMIT CHECK - Show friendly warning before upload
+    try {
+      const response = await fetch('/api/universal-usage-stats', {
+        method: 'GET',
+        credentials: 'include',
+        cache: 'no-store', // Force fresh data every time
+      });
+      
+      if (response.ok) {
+        const stats = await response.json();
+        const { hourlyUsed = 0, hourlyLimit = 5 } = stats.operations || {};
+        
+        // Check if this file would exceed hourly limit
+        if (hourlyUsed >= hourlyLimit) {
+          const timeToReset = new Date(Date.now() + 60*60*1000).toLocaleTimeString('en-US', { 
+            hour: '2-digit', 
+            minute: '2-digit'
+          });
+          return `⏰ You've reached your hourly limit of ${hourlyLimit} operations. Please try again after ${timeToReset}, or upgrade for unlimited access!`;
+        }
+        
+        // Show friendly warning when approaching limit (80% threshold)
+        if (hourlyUsed >= Math.floor(hourlyLimit * 0.8)) {
+          const remaining = hourlyLimit - hourlyUsed;
+          console.log(`💡 Approaching hourly limit: ${remaining} operations remaining`);
+        }
+      }
+    } catch (error) {
+      console.log('Could not check hourly limits:', error);
+      // Continue with validation if limit check fails
+    }
+    
+    // Check usage limits using the new backend operation checking system
+    const operationCheck = await checkOperation(file, PAGE_IDENTIFIER);
+    if (!operationCheck.allowed) {
+      return operationCheck.reason || 'Operation not allowed';
+    }
 
     const fileExtension = file.name.toLowerCase().split('.').pop();
     const isRawFormat = ['.cr2', '.arw', '.dng', '.nef', '.orf', '.rw2'].some(ext => file.name.toLowerCase().endsWith(ext));
@@ -382,7 +456,7 @@ export default function MicroJPEGLanding() {
     }
     
     return null;
-  }, []); // Removed checkOperation dependency
+  }, [checkOperation]);
   
   // Lead magnet state
   const [leadMagnetEmail, setLeadMagnetEmail] = useState('');
@@ -643,51 +717,7 @@ export default function MicroJPEGLanding() {
     });
   }, []);
 
-  // Server-side processing for all files (removed client-side WebAssembly approach)
-  const handleServerProcessing = useCallback(async (files: FileWithPreview[]): Promise<CompressionResult[]> => {
-    const results: CompressionResult[] = [];
-    
-    for (const file of files) {
-      try {
-        const formData = new FormData();
-        formData.append('image', file);
-        
-        if (conversionEnabled && selectedFormats.length > 0) {
-          formData.append('outputFormat', selectedFormats[0]);
-        }
-        
-        const response = await fetch('/api/compress', {
-          method: 'POST',
-          body: formData,
-        });
-        
-        if (!response.ok) {
-          throw new Error(`Server error: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        
-        results.push({
-          id: file.id,
-          originalName: file.name,
-          originalSize: file.size,
-          compressedSize: data.compressedSize || file.size,
-          compressionRatio: data.compressionRatio || 1,
-          downloadUrl: data.downloadUrl,
-          originalFormat: file.name.split('.').pop()?.toLowerCase() || 'unknown',
-          wasConverted: data.wasConverted || false
-        });
-        
-      } catch (error) {
-        console.error(`Failed to process ${file.name}:`, error);
-        throw error;
-      }
-    }
-    
-    return results;
-  }, [conversionEnabled, selectedFormats]);
-
-  // Start processing function - now using server-side processing only
+  // Start processing function - moved up to be accessible in useEffect
   const startProcessing = useCallback(async () => {
     // Process only newly added files to avoid reprocessing existing ones
     const filesToProcess = newlyAddedFiles.length > 0 ? newlyAddedFiles : selectedFiles;
@@ -728,56 +758,151 @@ export default function MicroJPEGLanding() {
     const fileIds = new Set(filesToProcess.map(f => f.id));
     setProcessingFileIds(fileIds);
 
+    let progressInterval: NodeJS.Timeout | undefined;
+    
     try {
-      setProcessingStatus(`Processing ${filesToProcess.length} file${filesToProcess.length !== 1 ? 's' : ''} on server...`);
-      setProcessingProgress(20);
+      // Prepare FormData for the real API
+      const formData = new FormData();
       
-      // Use server-side processing for all files
-      const results = await handleServerProcessing(filesToProcess);
+      // Add files to process to FormData
+      filesToProcess.forEach((file) => {
+        formData.append('files', file as File);
+      });
+
+      // Prepare compression settings
+      const settings = {
+        quality: 80, // Balanced quality for good compression ratios
+        outputFormat: conversionEnabled && selectedFormats.length > 0 ? selectedFormats : 'keep-original',
+        resizeOption: 'keep-original',
+        compressionAlgorithm: 'standard',
+      };
+
+      // Add settings to FormData
+      formData.append('settings', JSON.stringify(settings));
+
+      // Estimate processing duration based on file count and sizes
+      const totalSize = filesToProcess.reduce((sum, file) => sum + file.size, 0);
+      const estimatedDuration = Math.max(1000, Math.min(5000, filesToProcess.length * 800 + totalSize / 1024 / 1024 * 100));
       
-      // Update session with results
+      setProcessingProgress(15);
+      setProcessingStatus('Compressing images...');
+      
+      // Start progress simulation
+      let currentProgress = 15;
+      progressInterval = setInterval(() => {
+        const increment = Math.random() * 8 + 2; // 2-10% increments
+        currentProgress = Math.min(currentProgress + increment, 85); // Cap at 85% until completion
+        setProcessingProgress(Math.floor(currentProgress));
+      }, Math.max(estimatedDuration / 20, 200)); // Update every 200ms minimum
+
+      const response = await fetch('/api/compress', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      // Clear progress interval and set to completion
+      clearInterval(progressInterval);
+      setProcessingProgress(100);
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      // Record usage in local sessionStorage for free tier tracking
+      if (data.results && data.results.length > 0) {
+        // Each completed file operation counts as 1 operation
+        // data.results.length represents the number of files processed
+        const operationCount = data.results.length;
+        
+        // Record operations in local storage
+        recordCompression(operationCount);
+        
+        // Usage recording is handled server-side by DualUsageTracker
+        // No additional frontend recording needed
+        
+        // Usage stats are now automatically refreshed by header counter
+        
+        console.log(`Recorded ${operationCount} operations for ${data.results.length} files processed`);
+      }
+
+      // Get the latest session data to ensure we don't lose any previous results
       const latestSession = sessionManager.getSession();
-      const newSession = {
+      
+      console.log('startProcessing - Before updating session - existing results:', latestSession.results.length);
+      console.log('startProcessing - New results to add:', data.results?.length || 0);
+      
+      // Update session with results (accumulate with existing results)
+      const newSession: SessionData = {
         ...latestSession,
-        results: [...latestSession.results, ...results],
+        results: [...latestSession.results, ...(data.results || [])],
+        batchDownloadUrl: data.batchDownloadUrl,
       };
       
+      console.log('startProcessing - After merging - total results:', newSession.results.length);
+
       setSession(newSession);
       sessionManager.updateSession(newSession);
-      
-      // Record usage
-      recordCompression(results.length);
-      const conversionCount = results.filter(r => r.wasConverted).length;
-      if (conversionCount > 0) {
-        recordConversion(conversionCount);
+
+      // Instant counter update for zero-lag feedback
+      if (data.results && data.results.length > 0) {
+        updateCounterOptimistically(data.results.length);
       }
       
+      // Also refresh for backend verification with delay to ensure backend is updated
+      setTimeout(() => {
+        refreshUniversalCounter();
+      }, 500);
+      
+
+      // Usage stats are now automatically refreshed by header counter
       setProcessingProgress(100);
-      setProcessingStatus('Processing complete!');
+      setProcessingStatus('MicroJPEG just saved you space!');
       setModalState('complete');
       setIsProcessing(false);
-      setProcessingFileIds(new Set());
-      setNewlyAddedFiles([]);
+      setProcessingFileIds(new Set()); // Clear processing state
       
-      // Show pricing after 3+ files
+      // Don't clear selected files - keep them for thumbnails and format conversions
+      // Clear newly added files to prevent reprocessing
+      setNewlyAddedFiles([]);
+
+      // Show pricing cards after 3 or more files have been processed
       const uniqueFiles = new Set(newSession.results.map(r => r.originalName));
       if (uniqueFiles.size >= 3 && !showPricing) {
-        setTimeout(() => setShowPricing(true), 1000);
+        setTimeout(() => {
+          setShowPricing(true);
+        }, 1000); // Show pricing modal 1 second after processing completes
       }
 
     } catch (error) {
-      console.error('🚨 Processing error:', error);
+      console.error('Compression error:', error);
+      // Clear progress interval on error
+      if (progressInterval) {
+        clearInterval(progressInterval);
+      }
       toast({
-        title: "Processing failed",
-        description: error instanceof Error ? error.message : "Unknown error occurred",
+        title: "Compression failed",
+        description: error instanceof Error ? error.message : "An error occurred during compression",
         variant: "destructive",
       });
       setIsProcessing(false);
-      setProcessingFileIds(new Set());
+      setProcessingFileIds(new Set()); // Clear processing state on error
+      setCurrentlyProcessingFormat(null); // Clear currently processing format
       setShowModal(false);
+      
+      // Refresh counter to show current usage after failed operation
+      refreshUniversalCounter();
+      
+      // Don't clear selected files - keep them for thumbnails and format conversions
+      // Clear newly added files to prevent reprocessing
       setNewlyAddedFiles([]);
     }
-  }, [selectedFiles, newlyAddedFiles, handleServerProcessing, conversionEnabled, selectedFormats]);
+  }, [selectedFiles, user, session, selectedFormats, conversionEnabled, toast]);
 
   // Download all results as comprehensive ZIP
   const downloadAllResults = useCallback(async () => {
@@ -954,17 +1079,15 @@ export default function MicroJPEGLanding() {
         // Record operations in local storage
         recordCompression(operationCount);
         
-        // Also record conversions for RAW files and format changes
-        const conversionCount = data.results.filter((result: CompressionResult) => 
-          result.wasConverted || (result.originalFormat && result.outputFormat && isConversionRequest(result.originalFormat, result.outputFormat))
-        ).length;
-        
-        if (conversionCount > 0) {
-          recordConversion(conversionCount);
-        }
-        
         // Usage recording is handled server-side by DualUsageTracker
         // No additional frontend recording needed
+        
+        // Instant counter update for zero-lag feedback
+        updateCounterOptimistically(data.results.length);
+        
+        // Also refresh for backend verification
+        refreshUniversalCounter();
+        
         
         console.log(`Recorded ${operationCount} operations for ${data.results.length} files converted to ${format}`);
       }
@@ -1055,11 +1178,15 @@ export default function MicroJPEGLanding() {
       return;
     }
 
-    // Process files async to handle server-side validation
+    // Process files async to handle server-side validation and hourly limits
     for (const file of fileArray) {
       const error = await validateFile(file, !!user);
       if (error) {
         errors.push(error);
+        // Stop processing more files if hourly limit is reached
+        if (error.includes('hourly limit')) {
+          break;
+        }
       } else {
         // Check for duplicates - prevent uploading files already in selectedFiles or results
         const isDuplicate = selectedFiles.some(
@@ -1078,11 +1205,14 @@ export default function MicroJPEGLanding() {
     }
 
     if (errors.length > 0) {
+      // Check if it's a hourly limit error for friendly messaging
+      const hasHourlyLimitError = errors.some(error => error.includes('hourly limit'));
+      
       toast({
-        title: "File validation errors",
+        title: hasHourlyLimitError ? "⏰ Hourly Limit Reached" : "File validation errors",
         description: errors.join('\n'),
-        variant: "destructive",
-        duration: 5000,
+        variant: hasHourlyLimitError ? "default" : "destructive",
+        duration: hasHourlyLimitError ? 8000 : 5000, // Longer duration for limit messages
       });
     }
 
@@ -1930,41 +2060,14 @@ export default function MicroJPEGLanding() {
                             <div className="flex items-center gap-3 flex-wrap flex-1 justify-end">
                               {group.results.map((result) => {
                                 const formatInfo = getFormatInfo((result.outputFormat || 'unknown').toLowerCase());
-                                
-                                // Special handling for RAW conversions
-                                const isRawConversion = ['CR2', 'NEF', 'ARW', 'DNG', 'ORF', 'RAF', 'RW2'].includes(
-                                  result.originalFormat?.toUpperCase() || ''
-                                );
-                                
                                 return (
                                   <div key={result.id} className="flex items-center gap-2">
                                     {/* Compression percentage */}
                                     <div className="text-right">
                                       <div className="text-lg font-bold text-gray-700">
-                                        {(() => {
-                                          // Ensure we have valid numbers
-                                          const origSize = result.originalSize || 0;
-                                          const compSize = result.compressedSize || 0;
-                                          
-                                          if (origSize === 0 || compSize === 0) {
-                                            return 'N/A';
-                                          }
-                                          
-                                          const ratio = Math.round(((origSize - compSize) / origSize) * 100);
-                                          
-                                          // For RAW, show positive reduction even if output is larger than RAW input
-                                          // (because we're comparing to uncompressed baseline)
-                                          if (isRawConversion && ratio < 0) {
-                                            return `${Math.abs(ratio)}% compressed`;
-                                          }
-                                          
-                                          return (compSize > origSize ? '+' : '-') + Math.abs(ratio) + '%';
-                                        })()}
+                                        {result.compressedSize > result.originalSize ? '+' : '-'}{Math.abs(result.compressionRatio)}%
                                       </div>
-                                      <div className="text-sm text-gray-500">
-                                        {formatFileSize(result.compressedSize || 0)}
-                                        {isRawConversion && <span className="text-xs"> (from RAW)</span>}
-                                      </div>
+                                      <div className="text-sm text-gray-500">{formatFileSize(result.compressedSize)}</div>
                                     </div>
                                     
                                     {/* Format icon/button */}
@@ -2559,9 +2662,7 @@ export default function MicroJPEGLanding() {
       </section>
 
       {/* Our Products Section */}
-      <Suspense fallback={<div className="py-16 flex justify-center"><div className="animate-pulse">Loading...</div></div>}>
-        <OurProducts />
-      </Suspense>
+      <OurProducts />
 
       {/* Final Conversion Section - Bottom of Funnel */}
       <section className="py-16 bg-gradient-to-r from-brand-teal to-brand-teal-dark text-black relative overflow-hidden">

@@ -9,23 +9,14 @@ export class RazorpayService {
   private enabled: boolean = false;
 
   constructor() {
-    const keyId = process.env.RAZORPAY_KEY_ID?.trim();
-    const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
-    
-    if (keyId && keySecret && keyId !== '' && keySecret !== '') {
-      try {
-        this.razorpay = new Razorpay({
-          key_id: keyId,
-          key_secret: keySecret,
-        });
-        this.enabled = true;
-        console.log('Razorpay service initialized successfully');
-        console.log(`Razorpay Configuration: CONFIGURED`);
-      } catch (error) {
-        console.error('Razorpay initialization failed:', error);
-        console.log(`Razorpay Configuration: INITIALIZATION_FAILED`);
-        this.enabled = false;
-      }
+    if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
+      this.razorpay = new Razorpay({
+        key_id: process.env.RAZORPAY_KEY_ID,
+        key_secret: process.env.RAZORPAY_KEY_SECRET,
+      });
+      this.enabled = true;
+      console.log('Razorpay service initialized successfully');
+      console.log(`Razorpay Configuration: ${process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET ? 'CONFIGURED' : 'MISSING_CREDENTIALS'}`);
     } else {
       console.log('Razorpay credentials not found - service disabled');
       console.log(`Razorpay Configuration: MISSING_CREDENTIALS`);

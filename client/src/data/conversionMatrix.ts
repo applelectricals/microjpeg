@@ -41,7 +41,7 @@ export const FORMATS: Record<string, FormatInfo> = {
     supportsQuality: true,
     supportsResize: true,
     displayName: 'JPG',
-    icon: '/assets/format-icons/jpeg-icon.svg', // Use lightweight SVG icon instead
+    icon: '/assets/format-icons/jpeg.jpg',
     color: '#10B981',
     bgColor: '#D1FAE5',
     textColor: '#065F46'
@@ -54,7 +54,7 @@ export const FORMATS: Record<string, FormatInfo> = {
     supportsQuality: false,
     supportsResize: true,
     displayName: 'PNG',
-    icon: '/assets/format-icons/png-icon.svg', // Use lightweight SVG icon instead
+    icon: '/assets/format-icons/png.jpg',
     color: '#3B82F6',
     bgColor: '#DBEAFE',
     textColor: '#1E40AF'

@@ -3,21 +3,6 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
-    
-    <!-- CRITICAL PERFORMANCE: Early preconnects for fastest loading -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="preconnect" href="https://pagead2.googlesyndication.com">
-    <link rel="preconnect" href="https://www.googletagmanager.com">
-    
-    <!-- OPTIMIZED: Single combined font request to reduce network calls -->
-    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@400;500;600&family=Open+Sans:wght@400;500;600&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    
-    <!-- Fallback for non-JS -->
-    <noscript>
-      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@400;500;600&family=Open+Sans:wght@400;500;600&display=swap">
-    </noscript>
-    
     <title>MicroJPEG - Smart Image Compression Made Easy | Reduce File Size by 90%</title>
     <meta name="description" content="Best free JPEG compression tool online. Compress JPEG without quality loss up to 90% smaller files. Lossless algorithm preserves image quality. Real results: 3.2MB→384KB portraits, 5.8MB→642KB landscapes. TinyPNG alternative with batch processing." />
     <meta name="keywords" content="JPEG compression tool, compress JPEG without quality loss, free JPEG compressor, lossless JPEG compressor, online image compressor, best JPEG compression tool, reduce JPEG file size, TinyPNG alternative, batch compress JPEG online, optimize JPEG for web, image optimization for SEO, website speed optimization" />
@@ -84,42 +69,22 @@
     <meta itemprop="name" content="MicroJPEG - Smart Image Compression Made Easy | Reduce File Size by 90%" />
     <meta itemprop="description" content="Smart image compression made easy. Reduce file sizes by 90% with intelligent algorithms. Real examples: 3.2MB→384KB portraits, 5.8MB→642KB landscapes with perfect quality." />
     <meta itemprop="image" content="https://your-domain.replit.app/schema-image-compression-examples.jpg" />
-    <!-- Enhanced DNS prefetch and preconnect for ads -->
+    <!-- Performance Optimizations: DNS Prefetch and Preconnect -->
+    <link rel="dns-prefetch" href="//fonts.googleapis.com">
+    <link rel="dns-prefetch" href="//fonts.gstatic.com">
+    <link rel="dns-prefetch" href="//www.dropbox.com">
     <link rel="dns-prefetch" href="//pagead2.googlesyndication.com">
-    <link rel="dns-prefetch" href="//googletagmanager.com">
-    <link rel="dns-prefetch" href="//www.google-analytics.com">
-    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@400;500;600&display=swap"></noscript>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     
-    <!-- ULTRA OPTIMIZED: Heavily delayed ad loading to prevent performance impact -->
-    <script>
-      // Only load ads after page is fully interactive AND user shows engagement
-      let adLoadTimeout;
-      
-      const loadAds = () => {
-        const adsScript = document.createElement('script');
-        adsScript.async = true;
-        adsScript.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9368777119109420';
-        adsScript.crossOrigin = 'anonymous';
-        document.head.appendChild(adsScript);
-        console.log('Ads loaded after user engagement');
-      };
-      
-      const scheduleAdLoad = () => {
-        clearTimeout(adLoadTimeout);
-        adLoadTimeout = setTimeout(loadAds, 5000); // 5 seconds after engagement
-      };
-      
-      // Load ads only after page is complete AND user shows engagement
-      window.addEventListener('load', () => {
-        // Schedule initial load for 10 seconds after page load
-        adLoadTimeout = setTimeout(loadAds, 10000);
-        
-        // Or load immediately on user interaction
-        ['click', 'scroll', 'keydown', 'touchstart'].forEach(event => {
-          document.addEventListener(event, scheduleAdLoad, { once: true, passive: true });
-        });
-      });
-    </script>
+    <!-- Optimized Font Loading with font-display swap for faster rendering -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- AdSense with optimized loading -->
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9368777119109420"
+     crossorigin="anonymous"></script>
      
     <!-- Advanced JSON-LD Structured Data for Maximum SEO Impact -->
     <script type="application/ld+json">
@@ -354,6 +319,7 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <!-- Replit dev banner removed for production performance (saves 2.6KB + 230ms) -->
+    <!-- This is a replit script which adds a banner on the top of the page when opened in development mode outside the replit environment -->
+    <script type="text/javascript" src="https://replit.com/public/js/replit-dev-banner.js"></script>
   </body>
 </html>

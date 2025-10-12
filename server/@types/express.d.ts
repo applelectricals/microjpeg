@@ -10,7 +10,4 @@ declare global {
       };
     }
   }
-  
-  // Global cache for performance optimizations
-  var universalStatsCache: Map<string, { data: any; timestamp: number }> | undefined;
 }

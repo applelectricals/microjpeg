@@ -78,9 +78,6 @@ const Features = lazy(() => import("@/pages/features"));
 const Blog = lazy(() => import("@/pages/blog"));
 const BlogPost = lazy(() => import("@/pages/blog-post"));
 
-// Performance testing page
-const DummyTest = lazy(() => import("@/pages/dummy-test"));
-
 // Legal pages (lowest priority)
 // Legacy imports removed - using new legal hierarchy instead
 const CancellationPolicy = lazy(() => import("@/pages/cancellation-policy"));
@@ -150,9 +147,6 @@ function Router() {
   return (
     <Suspense fallback={<PageLoader />}>
       <Switch>
-        {/* Performance testing route */}
-        <Route path="/dummy-test" component={DummyTest} />
-        
         {/* Public routes with lazy loading */}
         <Route path="/api-docs" component={ApiDocs} />
         <Route path="/about" component={About} />

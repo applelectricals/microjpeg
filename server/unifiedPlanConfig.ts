@@ -48,7 +48,7 @@ export const UNIFIED_PLANS: Record<string, UnifiedPlan> = {
       monthlyOperations: 500,
       maxFileSize: 10 * 1024 * 1024, // 10MB
       maxOperationsPerDay: 25,
-      maxOperationsPerHour: null, // No hourly limit
+      maxOperationsPerHour: 5,
       maxConcurrentUploads: 1,
       processingTimeout: 30,
       allowedFormats: '*', // All image formats supported
@@ -59,6 +59,7 @@ export const UNIFIED_PLANS: Record<string, UnifiedPlan> = {
       'All image formats supported',
       'Max 10MB file size',
       'Max 25 operations/day',
+      'Max 5 operations/hour',
       '1 concurrent upload'
     ],
     requiresSignup: false,
@@ -75,7 +76,7 @@ export const UNIFIED_PLANS: Record<string, UnifiedPlan> = {
       monthlyOperations: 500,
       maxFileSize: 10 * 1024 * 1024, // 10MB
       maxOperationsPerDay: 25,
-      maxOperationsPerHour: null, // No hourly limit
+      maxOperationsPerHour: 5,
       maxConcurrentUploads: 1,
       processingTimeout: 30,
       allowedFormats: '*', // All image formats supported
@@ -86,6 +87,7 @@ export const UNIFIED_PLANS: Record<string, UnifiedPlan> = {
       'All image formats supported',
       'Max 10MB file size',
       'Max 25 operations/day',
+      'Max 5 operations/hour',
       '1 concurrent upload'
     ],
     requiresSignup: true,
@@ -102,7 +104,7 @@ export const UNIFIED_PLANS: Record<string, UnifiedPlan> = {
       monthlyOperations: 300, // 300 operations for 1 day
       maxFileSize: 50 * 1024 * 1024, // 50MB
       maxOperationsPerDay: 300, // all 300 can be used in 1 day
-      maxOperationsPerHour: null, // No hourly limit
+      maxOperationsPerHour: 20,
       maxConcurrentUploads: 3,
       processingTimeout: 60,
       allowedFormats: '*', // All image formats supported

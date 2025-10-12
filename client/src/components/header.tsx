@@ -1,17 +1,63 @@
 import { SiWordpress } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { Menu, X } from "lucide-react";
-import { useState } from "react";
+import { Menu, X, Activity, Clock, Calendar, Image, Camera } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
-import logoUrl from '@assets/LOGO.svg';
+import logoUrl from '@assets/mascot-logo-optimized.png';
 import { FORMATS } from '@/data/conversionMatrix';
 
 export default function Header() {
   const { user, isAuthenticated } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [dualStats, setDualStats] = useState<any>(null);
   const [location] = useLocation();
+  const optimisticCounterRef = useRef<{monthly: number, daily: number, hourly: number} | null>(null);
 
+
+  // Fetch dual usage statistics for header display
+  useEffect(() => {
+    const fetchDualStats = async () => {
+      try {
+        const response = await fetch('/api/universal-usage-stats', {
+          method: 'GET',
+          credentials: 'include',
+          cache: 'no-store', // Force fresh data every time
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          setDualStats(data);
+          // Reset optimistic counter when we get real data
+          optimisticCounterRef.current = null;
+        }
+      } catch (error) {
+        console.log('Header: Error fetching dual usage stats:', error);
+      }
+    };
+
+    fetchDualStats();
+    
+    // Refresh every 30 seconds for updates
+    const interval = setInterval(fetchDualStats, 30000);
+    
+    // Listen for manual refresh events from file operations with debounce
+    let refreshTimeout: NodeJS.Timeout;
+    const handleRefresh = () => {
+      console.log('🔄 Header: Refreshing counter after operation');
+      clearTimeout(refreshTimeout);
+      refreshTimeout = setTimeout(() => {
+        fetchDualStats();
+      }, 250);
+    };
+    
+    window.addEventListener('refreshUniversalCounter', handleRefresh);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('refreshUniversalCounter', handleRefresh);
+    };
+  }, []);
 
   // Determine what type of operations to show based on current page
   const getPageType = () => {
@@ -43,6 +89,149 @@ export default function Header() {
     return 'both';
   };
 
+  // Sleek header counter component with dual usage tracking
+  const HeaderCounter = () => {
+    const stats = dualStats?.stats;
+    if (!stats) return null;
+
+    const pageType = getPageType();
+    
+    // For RAW conversion pages, show only RAW counter
+    if (pageType === 'raw') {
+      const displayStats = stats.raw;
+      if (!displayStats) return null;
+
+      return (
+        <div className="flex items-center gap-3 text-xs">
+          {/* Page type indicator */}
+          <div className="flex items-center gap-1">
+            <Camera className="w-3 h-3 text-purple-600" />
+            <span className="text-xs font-medium text-gray-600 capitalize">RAW</span>
+          </div>
+          
+          {/* Monthly */}
+          <div className="flex items-center gap-1" data-testid="header-monthly-counter">
+            <Calendar className="w-3 h-3 text-blue-600" />
+            <span className="font-medium text-brand-dark">{displayStats.monthly.used}/{displayStats.monthly.limit}</span>
+            <span className="text-gray-500">month</span>
+          </div>
+          
+          {/* Daily */}
+          <div className="flex items-center gap-1" data-testid="header-daily-counter">
+            <Activity className="w-3 h-3 text-green-600" />
+            <span className="font-medium text-brand-dark">{displayStats.daily.used}/{displayStats.daily.limit}</span>
+            <span className="text-gray-500">day</span>
+          </div>
+          
+          {/* Hourly */}
+          <div className="flex items-center gap-1" data-testid="header-hourly-counter">
+            <Clock className="w-3 h-3 text-orange-600" />
+            <span className="font-medium text-brand-dark">{displayStats.hourly.used}/{displayStats.hourly.limit}</span>
+            <span className="text-gray-500">hour</span>
+          </div>
+        </div>
+      );
+    }
+
+    // For regular format conversion pages, show only Regular counter
+    if (pageType === 'regular') {
+      const displayStats = stats.regular;
+      if (!displayStats) return null;
+
+      return (
+        <div className="flex items-center gap-3 text-xs">
+          {/* Page type indicator */}
+          <div className="flex items-center gap-1">
+            <Image className="w-3 h-3 text-blue-600" />
+            <span className="text-xs font-medium text-gray-600 capitalize">Regular</span>
+          </div>
+          
+          {/* Monthly */}
+          <div className="flex items-center gap-1" data-testid="header-monthly-counter">
+            <Calendar className="w-3 h-3 text-blue-600" />
+            <span className="font-medium text-brand-dark">{displayStats.monthly.used}/{displayStats.monthly.limit}</span>
+            <span className="text-gray-500">month</span>
+          </div>
+          
+          {/* Daily */}
+          <div className="flex items-center gap-1" data-testid="header-daily-counter">
+            <Activity className="w-3 h-3 text-green-600" />
+            <span className="font-medium text-brand-dark">{displayStats.daily.used}/{displayStats.daily.limit}</span>
+            <span className="text-gray-500">day</span>
+          </div>
+          
+          {/* Hourly */}
+          <div className="flex items-center gap-1" data-testid="header-hourly-counter">
+            <Clock className="w-3 h-3 text-orange-600" />
+            <span className="font-medium text-brand-dark">{displayStats.hourly.used}/{displayStats.hourly.limit}</span>
+            <span className="text-gray-500">hour</span>
+          </div>
+        </div>
+      );
+    }
+
+    // For main landing page, show both Regular and RAW in two rows
+    if (pageType === 'both') {
+      return (
+        <div className="flex flex-col gap-1 text-xs">
+          {/* Regular Operations Row */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1">
+              <Image className="w-3 h-3 text-blue-600" />
+              <span className="text-xs font-medium text-gray-600">Regular</span>
+            </div>
+            
+            <div className="flex items-center gap-1" data-testid="header-regular-monthly-counter">
+              <Calendar className="w-3 h-3 text-blue-600" />
+              <span className="font-medium text-brand-dark">{stats.regular.monthly.used}/{stats.regular.monthly.limit}</span>
+              <span className="text-gray-500">month</span>
+            </div>
+            
+            <div className="flex items-center gap-1" data-testid="header-regular-daily-counter">
+              <Activity className="w-3 h-3 text-green-600" />
+              <span className="font-medium text-brand-dark">{stats.regular.daily.used}/{stats.regular.daily.limit}</span>
+              <span className="text-gray-500">day</span>
+            </div>
+            
+            <div className="flex items-center gap-1" data-testid="header-regular-hourly-counter">
+              <Clock className="w-3 h-3 text-orange-600" />
+              <span className="font-medium text-brand-dark">{stats.regular.hourly.used}/{stats.regular.hourly.limit}</span>
+              <span className="text-gray-500">hour</span>
+            </div>
+          </div>
+
+          {/* RAW Operations Row */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1">
+              <Camera className="w-3 h-3 text-purple-600" />
+              <span className="text-xs font-medium text-gray-600">RAW</span>
+            </div>
+            
+            <div className="flex items-center gap-1" data-testid="header-raw-monthly-counter">
+              <Calendar className="w-3 h-3 text-blue-600" />
+              <span className="font-medium text-brand-dark">{stats.raw.monthly.used}/{stats.raw.monthly.limit}</span>
+              <span className="text-gray-500">month</span>
+            </div>
+            
+            <div className="flex items-center gap-1" data-testid="header-raw-daily-counter">
+              <Activity className="w-3 h-3 text-green-600" />
+              <span className="font-medium text-brand-dark">{stats.raw.daily.used}/{stats.raw.daily.limit}</span>
+              <span className="text-gray-500">day</span>
+            </div>
+            
+            <div className="flex items-center gap-1" data-testid="header-raw-hourly-counter">
+              <Clock className="w-3 h-3 text-orange-600" />
+              <span className="font-medium text-brand-dark">{stats.raw.hourly.used}/{stats.raw.hourly.limit}</span>
+              <span className="text-gray-500">hour</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
   return (
     <>
       {/* Mobile Header - Simplified approach */}
@@ -52,12 +241,54 @@ export default function Header() {
             <img 
               src={logoUrl} 
               alt="MicroJPEG Logo" 
-              className="w-8 h-8 object-contain rounded-lg bg-white/80 p-1"
+              className="w-8 h-8 object-contain"
             />
             <div className="flex flex-col">
               <span className="text-lg font-bold font-poppins text-brand-dark">MicroJPEG</span>
               <span className="text-xs font-opensans text-brand-dark opacity-70 tracking-wider">PICTURE PERFECT</span>
             </div>
+          </div>
+          
+          {/* Mobile Usage Counter - Compact */}
+          <div className="flex items-center gap-2 text-xs">
+            {dualStats?.stats && (
+              <>
+                {(() => {
+                  const pageType = getPageType();
+                  
+                  // For CR2-to-PNG page, show only RAW
+                  if (pageType === 'raw') {
+                    const displayStats = dualStats.stats.raw;
+                    return (
+                      <div className="flex items-center gap-1" data-testid="mobile-monthly-counter">
+                        <Camera className="w-3 h-3 text-purple-600" />
+                        <span className="font-medium text-brand-dark text-xs">
+                          {displayStats.monthly.used}/{displayStats.monthly.limit}
+                        </span>
+                      </div>
+                    );
+                  }
+                  
+                  // For main landing page, show both (compact)
+                  if (pageType === 'both') {
+                    return (
+                      <div className="flex items-center gap-1" data-testid="mobile-both-counter">
+                        <Image className="w-3 h-3 text-blue-600" />
+                        <span className="font-medium text-brand-dark text-xs">
+                          {dualStats.stats.regular.monthly.used}/{dualStats.stats.regular.monthly.limit}
+                        </span>
+                        <Camera className="w-3 h-3 text-purple-600" />
+                        <span className="font-medium text-brand-dark text-xs">
+                          {dualStats.stats.raw.monthly.used}/{dualStats.stats.raw.monthly.limit}
+                        </span>
+                      </div>
+                    );
+                  }
+                  
+                  return null;
+                })()}
+              </>
+            )}
           </div>
           
           <button
@@ -76,7 +307,7 @@ export default function Header() {
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-              <img src={logoUrl} alt="MicroJPEG Logo" className="w-8 h-8 sm:w-[45px] sm:h-[45px] rounded-lg bg-white/80 p-1" fetchpriority="high" />
+              <img src={logoUrl} alt="MicroJPEG Logo" className="w-8 h-8 sm:w-[45px] sm:h-[45px]" />
               <div className="flex flex-col">
                 <span className="text-lg sm:text-2xl font-bold font-poppins text-brand-dark whitespace-nowrap">MicroJPEG</span>
                 <span className="text-xs font-opensans text-brand-dark/70 tracking-widest whitespace-nowrap">PICTURE PERFECT</span>
@@ -105,6 +336,9 @@ export default function Header() {
               </button>
               
             </nav>
+
+            {/* Desktop Usage Counter */}
+            <HeaderCounter />
 
             {/* Desktop Auth Buttons */}
             <div className="hidden lg:flex items-center gap-2 lg:gap-4 flex-shrink-0">

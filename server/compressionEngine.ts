@@ -3,29 +3,11 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import {
-  ProcessingResult,
-  validateProcessingResult,
-  RAWProcessingError,
-  RAW_ERROR_CODES,
-  SafeMath,
-  FileSizeUtils
-} from './rawProcessingUtils';
-
-// 🚀 ULTRA-STABLE SHARP PERFORMANCE - Prioritize consistency over speed
-sharp.cache({ 
-  memory: 512,   // Use only 512MB cache to prevent memory pressure
-  files: 50,     // Small file cache to prevent memory issues
-  items: 200     // Small operation cache
-});
-sharp.concurrency(1);  // Use single core to prevent resource contention
-sharp.simd(true);      // Keep SIMD for efficiency
-
-console.log('🚀 Ultra-Stable Sharp Performance: 512MB cache, 1 CPU core, SIMD enabled');
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const dcraw = require('dcraw');
 
 const execAsync = promisify(exec);
-
-import { validateProcessingResult, ProcessingResult, RAWProcessingError, RAW_ERROR_CODES, SafeMath, FileSizeUtils } from './rawProcessingUtils';
 
 export interface CompressionAnalysis {
   originalSize: number;
@@ -60,226 +42,6 @@ export interface AdvancedCompressionOptions {
 export class CompressionEngine {
 
   /**
-   * Industry-Standard RAW Processing with Comprehensive Validation
-   * Based on CloudConvert, ILoveIMG approach with NaN prevention
-   */
-  static async processRawConversionSmart(
-    inputPath: string, 
-    outputPath: string, 
-    outputFormat: string,
-    options: { 
-      quality?: number;
-      width?: number; 
-      height?: number;
-      resizePercentage?: number;
-    } = {}
-  ): Promise<ProcessingResult> {
-    const startTime = Date.now();
-    const quality = options.quality || 92; // Industry standard for RAW
-    
-    try {
-      console.log(`🎯 Industry-Standard RAW Processing: ${inputPath} -> ${outputFormat}`);
-      
-      // Step 1: Validate input file
-      const originalSize = await FileSizeUtils.getFileSizeWithValidation(inputPath);
-      if (originalSize > 500 * 1024 * 1024) { // 500MB limit
-        throw new RAWProcessingError(
-          'RAW file exceeds 500MB limit',
-          RAW_ERROR_CODES.FILE_TOO_LARGE,
-          undefined,
-          'Use a smaller RAW file or compress before uploading'
-        );
-      }
-      
-      // Step 2: Convert RAW to baseline format using system dcraw command
-      const baselinePath = `${outputPath}.baseline.tiff`;
-      
-      try {
-        // Use dcraw_emu for professional-grade RAW processing
-        const dcrawCommand = `dcraw_emu -w -T -6 -q 3 "${inputPath}"`;
-        console.log(`🔧 Running professional dcraw: ${dcrawCommand}`);
-        await execAsync(dcrawCommand);
-        
-        // dcraw creates TIFF with same base name
-        const baseName = inputPath.replace(/\.[^/.]+$/, "");
-        const dcrawOutput = baseName + '.tiff';
-        
-        // Verify output exists and rename
-        await fs.access(dcrawOutput);
-        await fs.rename(dcrawOutput, baselinePath);
-        
-        console.log(`✅ dcraw conversion successful`);
-      } catch (dcrawError) {
-        throw new RAWProcessingError(
-          'dcraw RAW processing failed',
-          RAW_ERROR_CODES.DCRAW_FAILED,
-          dcrawError as Error,
-          'Ensure file is a valid RAW format supported by dcraw'
-        );
-      }
-      
-      // Step 3: Get baseline size with validation
-      const baselineSize = await FileSizeUtils.getFileSizeWithValidation(baselinePath);
-      console.log(`📊 Baseline size: ${FileSizeUtils.formatFileSize(baselineSize)}`);
-      
-      // Step 4: Apply resize if needed
-      let processPath = baselinePath;
-      if (options.resizePercentage && options.resizePercentage < 100) {
-        processPath = await this.applyResize(baselinePath, outputPath, options.resizePercentage);
-      }
-      
-      // Step 5: Convert to final format with safe compression
-      await this.convertToFinalFormat(processPath, outputPath, outputFormat, quality);
-      
-      // Step 6: Validate final output
-      const finalSize = await FileSizeUtils.getFileSizeWithValidation(outputPath);
-      
-      // Step 7: Calculate metrics safely
-      const compressionRatio = SafeMath.compressionRatio(baselineSize, finalSize);
-      
-      // Cleanup temporary files
-      await this.cleanupTempFiles([baselinePath, processPath]);
-      
-      const processingTime = Date.now() - startTime;
-      console.log(`✅ RAW processing complete in ${processingTime}ms`);
-      
-      // Step 8: Return validated result
-      const rawResult = {
-        success: true,
-        originalSize,
-        processedSize: finalSize,
-        compressionRatio,
-        qualityAchieved: quality,
-        processingMethod: 'dcraw' as const,
-        timing: {
-          processingTime,
-          method: 'dcraw+imagemagick'
-        }
-      };
-      
-      return validateProcessingResult(rawResult, originalSize);
-      
-    } catch (error) {
-      console.error(`❌ RAW processing failed:`, error);
-      
-      if (error instanceof RAWProcessingError) {
-        throw error;
-      }
-      
-      throw new RAWProcessingError(
-        `RAW conversion failed: ${error instanceof Error ? error.message : String(error)}`,
-        RAW_ERROR_CODES.CONVERSION_FAILED,
-        error as Error
-      );
-    }
-  }
-
-  /**
-   * Apply resize using ImageMagick with validation
-   */
-  private static async applyResize(
-    inputPath: string, 
-    outputPath: string, 
-    resizePercentage: number
-  ): Promise<string> {
-    try {
-      // Get dimensions
-      const identifyCommand = `identify -ping -format "%wx%h" "${inputPath}"`;
-      const { stdout } = await execAsync(identifyCommand);
-      const [width, height] = stdout.trim().split('x').map(Number);
-      
-      if (!Number.isFinite(width) || !Number.isFinite(height)) {
-        throw new RAWProcessingError(
-          'Invalid image dimensions',
-          RAW_ERROR_CODES.CORRUPTED_FILE
-        );
-      }
-      
-      const targetWidth = Math.round(width * (resizePercentage / 100));
-      const targetHeight = Math.round(height * (resizePercentage / 100));
-      
-      const resizedPath = `${outputPath}.resized.tiff`;
-      const resizeCommand = `convert "${inputPath}" -resize "${targetWidth}x${targetHeight}!" "${resizedPath}"`;
-      
-      console.log(`🔧 Resizing: ${width}x${height} -> ${targetWidth}x${targetHeight}`);
-      await execAsync(resizeCommand);
-      
-      return resizedPath;
-    } catch (error) {
-      throw new RAWProcessingError(
-        'Resize operation failed',
-        RAW_ERROR_CODES.CONVERSION_FAILED,
-        error as Error
-      );
-    }
-  }
-
-  /**
-   * Convert to final format with industry-standard settings
-   */
-  private static async convertToFinalFormat(
-    inputPath: string,
-    outputPath: string,
-    outputFormat: string,
-    quality: number
-  ): Promise<void> {
-    let convertCommand: string;
-    
-    switch (outputFormat.toLowerCase()) {
-      case 'jpeg':
-      case 'jpg':
-        // CloudConvert standard: high quality JPEG with optimized sampling
-        convertCommand = `convert "${inputPath}" -quality ${quality} -sampling-factor 4:2:0 -strip -colorspace sRGB "${outputPath}"`;
-        break;
-        
-      case 'png':
-        // PNG with compression level 9 (maximum compression)
-        convertCommand = `convert "${inputPath}" -define png:compression-level=9 -strip "${outputPath}"`;
-        break;
-        
-      case 'webp':
-        // WebP with advanced compression method
-        convertCommand = `convert "${inputPath}" -quality ${quality} -define webp:method=6 -strip "${outputPath}"`;
-        break;
-        
-      case 'avif':
-        // AVIF with high-quality encoding
-        convertCommand = `convert "${inputPath}" -quality ${quality} -strip "${outputPath}"`;
-        break;
-        
-      case 'tiff':
-        // TIFF with LZW compression
-        convertCommand = `convert "${inputPath}" -compress lzw -strip "${outputPath}"`;
-        break;
-        
-      default:
-        throw new RAWProcessingError(
-          `Unsupported output format: ${outputFormat}`,
-          RAW_ERROR_CODES.INVALID_PARAMETERS,
-          undefined,
-          'Use JPEG, PNG, WebP, AVIF, or TIFF format'
-        );
-    }
-    
-    console.log(`🔧 Converting to ${outputFormat}: ImageMagick`);
-    await execAsync(convertCommand);
-  }
-
-  /**
-   * Clean up temporary files safely
-   */
-  private static async cleanupTempFiles(paths: string[]): Promise<void> {
-    for (const filePath of paths) {
-      try {
-        await fs.unlink(filePath);
-      } catch (error) {
-        // Ignore cleanup errors but log them
-        console.warn(`Cleanup warning for ${filePath}:`, error);
-      }
-    }
-  }
-
-  /**
    * Process RAW files using dcraw.js - industry standard RAW processor
    */
   static async processRawWithDcraw(
@@ -291,12 +53,6 @@ export class CompressionEngine {
     const { quality = 75, width, height } = options;
     
     try {
-      // Load dcraw dynamically
-      const dcrawModule = await loadDcraw();
-      if (!dcrawModule) {
-        throw new Error('dcraw not available in this environment');
-      }
-      
       console.log(`Processing RAW file with dcraw: ${inputPath} -> ${outputPath}`);
       
       // Read the RAW file
@@ -321,7 +77,7 @@ export class CompressionEngine {
         };
       }
       
-      const result = dcrawModule(rawBuffer, dcrawOptions);
+      const result = dcraw(rawBuffer, dcrawOptions);
       
       if (!result || result.length === 0) {
         throw new Error('dcraw processing returned empty result');
@@ -345,13 +101,7 @@ export class CompressionEngine {
         case 'jpeg':
         case 'jpg':
           await sharpInstance
-            .jpeg({ 
-              quality, 
-              progressive: false,  // Disable progressive for speed
-              mozjpeg: false,      // Disable mozjpeg for speed
-              optimiseCoding: false,  // Disable optimization for speed
-              trellisQuantisation: false  // Disable trellis for speed
-            })
+            .jpeg({ quality, progressive: true, mozjpeg: true })
             .toFile(outputPath);
           break;
         case 'png':
@@ -381,14 +131,9 @@ export class CompressionEngine {
             .toFile(outputPath);
           break;
         default:
-          // Default to JPEG with speed optimization
+          // Default to JPEG
           await sharpInstance
-            .jpeg({ 
-              quality, 
-              progressive: false,  // Disable progressive for speed
-              optimiseCoding: false,  // Disable optimization for speed
-              trellisQuantisation: false  // Disable trellis for speed
-            })
+            .jpeg({ quality, progressive: true })
             .toFile(outputPath);
       }
       
@@ -396,8 +141,7 @@ export class CompressionEngine {
       
     } catch (error) {
       console.error(`dcraw processing failed:`, error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      throw new Error(`RAW processing failed: ${errorMessage}`);
+      throw new Error(`RAW processing failed: ${error.message}`);
     }
   }
 
@@ -406,10 +150,6 @@ export class CompressionEngine {
    */
   static async canDcrawProcess(filePath: string): Promise<boolean> {
     try {
-      if (!dcraw) {
-        return false;
-      }
-      
       const rawBuffer = await fs.readFile(filePath);
       
       // Try to get metadata to verify it's a valid RAW file
@@ -417,8 +157,7 @@ export class CompressionEngine {
       
       return metadata && metadata.length > 0 && !metadata.includes('not a raw file');
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`dcraw identify failed: ${errorMessage}`);
+      console.error(`dcraw identify failed: ${error.message}`);
       return false;
     }
   }
@@ -480,8 +219,7 @@ export class CompressionEngine {
         console.warn('ImageMagick stderr:', stderr);
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      throw new Error(`ImageMagick processing failed: ${errorMessage}`);
+      throw new Error(`ImageMagick processing failed: ${error.message}`);
     }
   }
 
@@ -496,8 +234,7 @@ export class CompressionEngine {
       console.log(`ImageMagick identify stderr: ${stderr}`);
       return stdout.length > 0 && !stdout.includes('no decode delegate');
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`ImageMagick identify failed: ${errorMessage}`);
+      console.error(`ImageMagick identify failed: ${error.message}`);
       return false;
     }
   }
@@ -598,20 +335,15 @@ export class CompressionEngine {
     while (iterations < maxIterations) {
       iterations++;
       
-      // Create Sharp instance with current quality and performance optimization
-      let sharpInstance = sharp(inputPath, {
-        sequentialRead: true,    // Faster for large files
-        limitInputPixels: false, // Remove pixel limit
-        density: 72             // Optimized density
-      });
+      // Create Sharp instance with current quality
+      let sharpInstance = sharp(inputPath);
       
-      // 🚀 PERFORMANCE: Skip slow webOptimized operations for speed
-      // if (webOptimized) {
-      //   sharpInstance = sharpInstance
-      //     .withMetadata({})
-      //     .normalize()
-      //     .rotate();
-      // }
+      if (webOptimized) {
+        sharpInstance = sharpInstance
+          .withMetadata({})
+          .normalize()
+          .rotate();
+      }
       
       // Apply JPEG compression with speed optimizations
       sharpInstance = sharpInstance.jpeg({
@@ -755,32 +487,21 @@ export class CompressionEngine {
         
         return {
           finalSize: outputStats.size,
-          qualityUsed: adjustedQuality
+          qualityUsed: adjustedQuality,
+          baselineSize: tempStats.size // Use uncompressed TIFF size as baseline for ratio calculation
         };
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        throw new Error(`Failed to process RAW ${inputExtension?.toUpperCase()} file: ${errorMessage}`);
+        throw new Error(`Failed to process RAW ${inputExtension?.toUpperCase()} file: ${error.message}`);
       }
     }
     
-    // For non-RAW formats, use Sharp with stable settings
+    // For non-RAW formats, use Sharp
     let sharpInstance: sharp.Sharp;
     
     try {
-      // 🚀 STABLE PERFORMANCE: Use conservative Sharp settings
-      sharpInstance = sharp(inputPath, {
-        sequentialRead: true,    // Faster for large files
-        limitInputPixels: false, // Remove pixel limit
-        density: 72,            // Optimized density
-        failOnError: false      // Don't fail on minor errors
-      });
-      
-      // 📊 MEMORY MANAGEMENT: Explicitly manage resources
-      sharpInstance = sharpInstance.timeout({ seconds: 30 }); // Prevent hanging
-      
+      sharpInstance = sharp(inputPath);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to process ${inputExtension?.toUpperCase()} file: ${errorMessage}`);
+      throw new Error(`Failed to process ${inputExtension?.toUpperCase()} file: ${error.message}`);
     }
 
     // Apply resize quality if specified
@@ -789,17 +510,12 @@ export class CompressionEngine {
       sharpInstance = sharpInstance.resize({ kernel: resizeKernel as keyof sharp.KernelEnum });
     }
 
-    // Apply web optimization - SIMPLIFIED FOR CONSISTENCY 
+    // Apply web optimization
     if (webOptimized) {
-      // 🚀 MINIMAL WEB OPTIMIZATION: Only essential operations
-      try {
-        sharpInstance = sharpInstance.rotate(); // Only auto-rotation, nothing else
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        console.warn('Web optimization rotate failed, continuing without it:', errorMessage);
-        // Continue without rotation if it fails
-      }
-      // Removed ALL slow operations: .withMetadata({}), .normalize()
+      sharpInstance = sharpInstance
+        .withMetadata({})
+        .normalize()
+        .rotate();
     }
 
     // Apply format-specific settings
@@ -1021,19 +737,14 @@ export class CompressionEngine {
     for (const width of options.sizes) {
       const outputPath = path.join(outputDir, `${baseName}-${width}w.${options.format === 'jpeg' ? 'jpg' : options.format}`);
       
-      let sharpInstance = sharp(inputPath, {
-        sequentialRead: true,    // Faster for large files
-        limitInputPixels: false, // Remove pixel limit
-        density: 72             // Optimized density
-      });
+      let sharpInstance = sharp(inputPath);
       
-      // 🚀 PERFORMANCE: Skip slow webOptimized operations for speed
-      // if (options.webOptimized) {
-      //   sharpInstance = sharpInstance
-      //     .withMetadata({})
-      //     .normalize()
-      //     .rotate();
-      // }
+      if (options.webOptimized) {
+        sharpInstance = sharpInstance
+          .withMetadata({})
+          .normalize()
+          .rotate();
+      }
       
       // Resize with high-quality resampling
       sharpInstance = sharpInstance.resize(width, null, {

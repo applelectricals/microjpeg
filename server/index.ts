@@ -1,56 +1,23 @@
-import './polyfill';
-import 'dotenv/config';
+import "./polyfill";
 import express, { type Request, Response, NextFunction } from "express";
-import session from 'express-session';
-import cors from 'cors';
 import { registerRoutes } from "./routes";
-import { serveStatic } from "./viteStatic"; // Only prod static serving here!
-// import { TestPremiumExpiryManager } from "./testPremiumExpiry"; // Temporarily disabled due to schema issues
+import { setupVite, serveStatic, log } from "./vite";
+import { TestPremiumExpiryManager } from "./testPremiumExpiry";
 import { initializeQueueService, shutdownQueueService } from "./queueService";
-import { checkEnvironmentVariables } from "./envChecker";
-import { initializeProductionDatabase } from "./initDatabase";
+import { seedSuperuser } from "./superuser";
 
 const app = express();
-
-// Check environment variables on startup
-console.log('🚀 Starting MicroJPEG Server...');
-checkEnvironmentVariables();
-
-// Initialize database tables
-initializeProductionDatabase();
-
-app.set('trust proxy', 1);
-app.set('etag', false);
-
-app.use(cors({
-  origin: 'https://microjpeg.com',
-  credentials: true,
-}));
-
+app.set('etag', false); // Disable ETags to prevent 304 responses
 app.use(express.json({ limit: '200mb' }));
 app.use(express.urlencoded({ extended: false, limit: '200mb' }));
 
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || 'fallback-secret-key-for-development',
-    resave: false,
-    saveUninitialized: true,
-    cookie: {
-      secure: true,
-      sameSite: 'none',
-    },
-  })
-);
-
+// Force all traffic to serve the React app (prevent external redirects)
 app.use((req, res, next) => {
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  // Add security headers to prevent external redirects
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  next();
-});
-
-app.use((req, res, next) => {
+  
   const start = Date.now();
   const path = req.path;
   let capturedJsonResponse: Record<string, any> | undefined = undefined;
@@ -68,8 +35,12 @@ app.use((req, res, next) => {
       if (capturedJsonResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
-      if (logLine.length > 80) logLine = logLine.slice(0, 79) + "…";
-      console.log(logLine);
+
+      if (logLine.length > 80) {
+        logLine = logLine.slice(0, 79) + "…";
+      }
+
+      log(logLine);
     }
   });
 
@@ -77,22 +48,28 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Initialize Redis and queue services
   try {
     const queueInitialized = await initializeQueueService();
     if (!queueInitialized) {
-      console.warn('⚠️  Queue service disabled - Redis has been eliminated for performance');
+      console.warn('⚠️  Queue service failed to initialize - will fallback to direct processing');
     }
   } catch (error) {
     console.error('❌ Queue service initialization error:', error);
-    console.log('📝 Note: Redis has been eliminated from this application');
+    console.log('📝 Note: Set REDIS_URL environment variable for queue functionality');
   }
 
-  // 301 redirects for legacy URLs (unchanged)
+  // Initialize superuser (seed if doesn't exist)
+  await seedSuperuser();
+
+  // 301 redirects for legacy URLs (SEO-friendly permanent redirects)
   app.use((req, res, next) => {
+    // Normalize path by removing trailing slash for consistent matching
     const normalizedPath = req.path.endsWith('/') && req.path !== '/' ? req.path.slice(0, -1) : req.path;
+    
     const redirectMap: Record<string, string> = {
       '/compress-free': '/free',
-      '/compress-premium': '/premium',
+      '/compress-premium': '/premium', 
       '/compress-enterprise': '/enterprise',
       '/wordpress/details': '/wordpress-plugin',
       '/wordpress/installation': '/wordpress-plugin/install',
@@ -111,52 +88,53 @@ app.use((req, res, next) => {
       '/cancellation-policy': '/legal/cancellation',
       '/payment-protection': '/legal/payment-protection'
     };
+
     const redirectTo = redirectMap[normalizedPath];
     if (redirectTo) {
+      // Preserve query parameters if any
       const queryString = req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
       return res.redirect(301, redirectTo + queryString);
     }
+    
     next();
   });
 
   const server = await registerRoutes(app);
 
-  // Debug: Log all registered routes
-  console.log('🔍 Registered routes:');
-  app._router.stack.forEach((r: any) => {
-    if (r.route && r.route.path) {
-      console.log(`  ${Object.keys(r.route.methods).join(', ').toUpperCase()} ${r.route.path}`);
-    }
-  });
-
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
+
     res.status(status).json({ message });
     throw err;
   });
 
-  // **This is the KEY change for the split!**
-  if (process.env.NODE_ENV === "development") {
-    try {
-      const { setupVite } = await import("./viteDev.js");
-      await setupVite(app, server);
-    } catch (error) {
-      console.log("Development mode detected but viteDev.js not available, falling back to static serving");
-      serveStatic(app);
-    }
+  // importantly only setup vite in development and after
+  // setting up all the other routes so the catch-all route
+  // doesn't interfere with the other routes
+  if (app.get("env") === "development") {
+    await setupVite(app, server);
   } else {
     serveStatic(app);
   }
 
+  // ALWAYS serve the app on the port specified in the environment variable PORT
+  // Other ports are firewalled. Default to 5000 if not specified.
+  // this serves both the API and the client.
+  // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
-  const hostname = '0.0.0.0';
-
-  server.listen(port, hostname, () => {
-    console.log(`serving on port ${port} on ${hostname}`);
-    // TestPremiumExpiryManager.startExpiryChecker(); // Temporarily disabled due to schema issues
+  server.listen({
+    port,
+    host: "0.0.0.0",
+    reusePort: true,
+  }, () => {
+    log(`serving on port ${port}`);
+    
+    // Start test-premium expiry checker
+    TestPremiumExpiryManager.startExpiryChecker();
   });
 
+  // Graceful shutdown handling
   process.on('SIGTERM', async () => {
     console.log('🔄 Received SIGTERM, shutting down gracefully...');
     await shutdownQueueService();

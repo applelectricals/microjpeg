@@ -1,6 +1,6 @@
 // Dynamic imports for images to enable code splitting
 export const loadMascotImages = {
-  logo: () => import('@assets/LOGO.svg').then(m => m.default),
+  logo: () => import('@assets/logo.png').then(m => m.default),
   mascot: () => import('@/assets/mascot.webp').then(m => m.default),
   owl01: () => import('@assets/owl-mascot-01.webp').then(m => m.default),
   owl02: () => import('@assets/owl-mascot-02.webp').then(m => m.default),
@@ -13,7 +13,8 @@ export const loadMascotImages = {
 
 export const loadFormatIcons = {
   avif: () => import('@/assets/format-icons/avif.jpg').then(m => m.default),
-  // jpeg and png icons removed - use Lucide icons instead for better performance
+  jpeg: () => import('@/assets/format-icons/jpeg.jpg').then(m => m.default),
+  png: () => import('@/assets/format-icons/png.jpg').then(m => m.default),
   webp: () => import('@/assets/format-icons/webp.jpg').then(m => m.default),
 };
 
@@ -24,7 +25,8 @@ export const loadBetaUserImages = {
 };
 
 export const loadBackgroundImages = {
-  // Enterprise background removed from here - it's already imported directly in enterprise-compress.tsx
+  freeSignedBg: () => import('@assets/BG_FREE_SIGNED_IN_1756967630788.webp').then(m => m.default),
+  enterpriseBg: () => import('@assets/Enterprise_1757182829138.webp').then(m => m.default),
   natureBg: () => import("@assets/pexels-asphotograpy-96627_1754826551408.jpg").then(m => m.default),
 };
 

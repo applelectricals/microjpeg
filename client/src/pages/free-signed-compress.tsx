@@ -10,18 +10,18 @@ import { Switch } from '@/components/ui/switch';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { useUsageStats } from '@/hooks/useUsageStats';
 import { apiRequest } from '@/lib/queryClient';
 import { getUsageStats, canCompress, canConvert, recordCompression, recordConversion, isConversionRequest, canOperateHourly } from '@/lib/usageTracker';
+// Removed redundant usage trackers - using DualCounter only
 import Header from '@/components/header';
 import { SEOHead } from '@/components/SEOHead';
 import avifIcon from '@/assets/format-icons/avif.jpg';
-// Format icons replaced with lightweight Lucide icons
-import { getFormatIcon } from '@/utils/formatIcons';
-// import jpegIcon from '@/assets/format-icons/jpeg.jpg'; // Removed large file
-// import pngIcon from '@/assets/format-icons/png.jpg';   // Removed large file
+import jpegIcon from '@/assets/format-icons/jpeg.jpg';
+import pngIcon from '@/assets/format-icons/png.jpg';
 import webpIcon from '@/assets/format-icons/webp.jpg';
 // Critical images only (loaded immediately)
-import logoUrl from '@assets/LOGO.svg';
+import logoUrl from '@assets/mascot-logo-optimized.png';
 import mascotUrl from '@/assets/mascot.webp';
 import freeSignedBg from '@/assets/background.webp';
 import owlMascot01 from '@assets/owl-mascot-01.webp';
@@ -41,8 +41,8 @@ const OurProducts = lazy(() => import('@/components/our-products'));
 const loadFormatIcon = (format: string) => {
   switch (format) {
     case 'avif': return import('@/assets/format-icons/avif.jpg').then(m => m.default);
-    // case 'jpeg': return import('@/assets/format-icons/jpeg.jpg').then(m => m.default); // Removed large file
-    // case 'png': return import('@/assets/format-icons/png.jpg').then(m => m.default);   // Removed large file
+    case 'jpeg': return import('@/assets/format-icons/jpeg.jpg').then(m => m.default);
+    case 'png': return import('@/assets/format-icons/png.jpg').then(m => m.default);
     case 'webp': return import('@/assets/format-icons/webp.jpg').then(m => m.default);
     default: return Promise.resolve('');
   }
@@ -406,10 +406,7 @@ const trackSocialShare = async (platform: string) => {
 
 export default function MicroJPEGLanding() {
   const { isAuthenticated, user, isLoading } = useAuth();
-  // Disabled usage stats polling for performance - using fallback display values
-  // const { data: usageStats, refetch: refetchUsage } = useUsageStats();
-  const usageStats = { operations: { monthly: { used: 0, limit: 500 } } }; // Fallback for display
-  const refetchUsage = () => {}; // No-op function
+  const { data: usageStats, refetch: refetchUsage } = useUsageStats();
   const { toast } = useToast();
   
   // Authentication guard - redirect to login if not authenticated

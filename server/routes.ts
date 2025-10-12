@@ -1,4 +1,3 @@
-import { isAuthenticated, setupAuth } from './auth';
 import type { Express } from "express";
 import express from "express";
 import { createServer, type Server } from "http";
@@ -14,17 +13,9 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import { storage } from "./storage";
 import { emailService } from "./emailService";
-import { InsertCompressionJob, specialFormatTrials, users, userUsage } from "@shared/schema";
+import { insertCompressionJobSchema, specialFormatTrials, creditPurchases, users, userUsage, type SpecialFormatTrial } from "@shared/schema";
 import { z } from "zod";
 import CompressionEngine from "./compressionEngine";
-import { fileCacheService } from "./fileCacheService";
-
-// Extend session to include userId
-declare module 'express-session' {
-  interface SessionData {
-    userId: number;
-  }
-}
 import { db } from "./db";
 import { and, eq, gt, sql } from "drizzle-orm";
 import { compressToTargetSize, generateOptimizationInsights } from "./compressionUtils";
@@ -35,8 +26,7 @@ import { pageIdentifierMiddleware } from './pageIdentifierMiddleware';
 import { DualUsageTracker } from './services/DualUsageTracker';
 import { OPERATION_CONFIG } from './config/operationLimits';
 import { ensureSuperuser, logAdminAction, getAppSettings, updateAppSettings, setSuperuserBypass } from './superuser';
-import { validateProcessingResult, ProcessingResult, RAWProcessingError, RAW_ERROR_CODES, SafeMath, FileSizeUtils, QUALITY_PRESETS } from './rawProcessingUtils';
-import { adminAuditLogs } from '@shared/schema';
+import { adminAuditLogs, userUsage } from '@shared/schema';
 import { registerConversionRoutes } from './conversionMiddleware';
 import { subscriptionTierAccessControl, tierBasedRouting, apiTierAccessControl } from './subscriptionTierMiddleware';
 
@@ -383,6 +373,7 @@ async function processCompressionJob(
     await storage.updateCompressionJob(jobId, {
       status: "completed",
       compressedSize: result.finalSize,
+      compressionRatio,
       compressedPath: outputPath,
       qualityLevel: quality.toString(),
       outputFormat: outputFormat,
@@ -394,7 +385,7 @@ async function processCompressionJob(
     
     // Record successful operation with DualUsageTracker
     try {
-      const dualTracker = new DualUsageTracker(userId, sessionId || undefined, userType);
+      const dualTracker = new DualUsageTracker(userId, sessionId, userType);
       await dualTracker.recordOperation(originalFilename, originalStats.size, pageIdentifier);
       console.log(`✅ DualUsageTracker recorded operation: ${originalFilename} (${originalStats.size} bytes) on ${pageIdentifier}`);
     } catch (recordError) {
@@ -405,16 +396,16 @@ async function processCompressionJob(
     
   } catch (error) {
     console.error(`Failed to process job ${jobId}:`, error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
     await storage.updateCompressionJob(jobId, {
       status: "failed",
-      errorMessage: `Processing failed: ${errorMessage}`
+      errorMessage: `Processing failed: ${error.message}`
     });
   }
 }
+import { setupAuth, isAuthenticated } from "./replitAuth";
 import { 
-  // createRazorpayOrder, // DISABLED: Razorpay not needed
-  // verifyRazorpayPayment, // DISABLED: Razorpay not needed
+  createRazorpayOrder, 
+  verifyRazorpayPayment, 
   processPayPalPayment, 
   getSubscriptionStatus, 
   cancelSubscription 
@@ -423,6 +414,7 @@ import { createPaypalOrder, capturePaypalOrder, loadPaypalDefault } from "./payp
 import { hashPassword, verifyPassword } from "./auth";
 import { loginSchema, signupSchema, type LoginInput, type SignupInput } from "@shared/schema";
 // Removed redundant usage trackers - using DualUsageTracker only
+import { safeRedis } from './redis';
 import { anonymousSessionScopes } from '@shared/schema';
 // Removed scopeMiddleware - using simplified functions
 
@@ -447,20 +439,12 @@ import { apiManagementRouter } from "./apiManagement";
 import { apiDocsRouter } from "./apiDocs";
 
 // Initialize Stripe
-let stripe: Stripe | null = null;
-try {
-  if (!process.env.STRIPE_SECRET_KEY) {
-    console.warn('STRIPE_SECRET_KEY not provided - Stripe payments will be disabled');
-  } else {
-    stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: "2025-08-27.basil",
-    });
-    console.log('✅ Stripe initialized successfully');
-  }
-} catch (error) {
-  console.error('Failed to initialize Stripe:', error);
-  console.warn('Stripe payments will be disabled');
+if (!process.env.STRIPE_SECRET_KEY) {
+  throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
 }
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+  apiVersion: "2025-08-27.basil",
+});
 
 // Configure multer for file uploads with dynamic limits
 const upload = multer({
@@ -469,29 +453,16 @@ const upload = multer({
     fileSize: 200 * 1024 * 1024, // 200MB limit (supports Enterprise users)
   },
   fileFilter: (req, file, cb) => {
-    // Allow all supported image formats - detailed validation happens later in the endpoint
-    const supportedTypes = [
-      'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/avif',
-      'image/svg+xml', 'image/tiff', 'image/tif',
-      // RAW formats (browsers might use different MIME types)
-      'image/x-adobe-dng', 'image/x-canon-cr2', 'image/x-nikon-nef', 'image/x-sony-arw',
-      'application/octet-stream' // Fallback for RAW files that browsers can't identify
-    ];
+    // Check format access based on user plan using unified configuration
+    const user = req.user;
+    const planId = user ? 'free' : 'anonymous';
+    const fileExtension = file.originalname.split('.').pop()?.toLowerCase() || '';
     
-    const fileName = file.originalname.toLowerCase();
-    const hasValidExtension = 
-      fileName.endsWith('.jpg') || fileName.endsWith('.jpeg') || fileName.endsWith('.png') ||
-      fileName.endsWith('.webp') || fileName.endsWith('.avif') || fileName.endsWith('.svg') ||
-      fileName.endsWith('.tiff') || fileName.endsWith('.tif') ||
-      fileName.endsWith('.cr2') || fileName.endsWith('.arw') || fileName.endsWith('.dng') ||
-      fileName.endsWith('.nef') || fileName.endsWith('.orf') || fileName.endsWith('.raf') ||
-      fileName.endsWith('.rw2') || fileName.endsWith('.crw');
-    
-    // Accept file if MIME type is supported OR if extension is valid
-    if (supportedTypes.includes(file.mimetype) || hasValidExtension) {
+    const formatCheck = checkFormatAccess(planId, fileExtension);
+    if (formatCheck.allowed) {
       cb(null, true);
     } else {
-      cb(new Error(`File format not supported. Supported formats: JPG, PNG, WEBP, AVIF, SVG, TIFF, RAW (CR2, ARW, DNG, NEF, ORF, RAF, RW2)`));
+      cb(new Error(formatCheck.message || 'File format not supported'));
     }
   },
 });
@@ -540,12 +511,6 @@ async function ensureDirectories() {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
- 
-  // Test route - should ALWAYS work
-  app.get('/api/test', (req, res) => {
-    res.json({ message: 'API is working!' });
-  });
-  
   await ensureDirectories();
   
   // Enable compression middleware for better performance
@@ -614,22 +579,98 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
       res.status(503).json({
         status: 'error',
         message: 'R2 service not available',
-        error: errorMessage
+        error: error.message
       });
     }
   });
 
-  // Health check endpoints for queues (Redis eliminated)
+  // Health check endpoints for Redis and queues
   app.get('/health/redis', async (req, res) => {
-    res.json({
-      status: 'healthy',
-      redis: 'eliminated',
-      message: 'Redis has been eliminated for improved performance'
-    });
+    try {
+      const { getQueueServiceStatus } = await import('./queueService');
+      const status = await getQueueServiceStatus();
+      
+      if (status.redis && Object.values(status.queues).every(Boolean)) {
+        res.json({
+          status: 'healthy',
+          redis: status.redis,
+          queues: status.queues,
+          ...(status.stats && { stats: status.stats })
+        });
+      } else {
+        res.status(503).json({
+          status: 'unhealthy',
+          redis: status.redis,
+          queues: status.queues
+        });
+      }
+    } catch (error) {
+      res.status(503).json({
+        status: 'error',
+        message: 'Queue service not available',
+        redis: false,
+        queues: { imageQueue: false, rawQueue: false, bulkQueue: false }
+      });
+    }
+  });
+
+  // Cache monitoring endpoints
+  app.get('/health/cache', async (req, res) => {
+    try {
+      const { cachedStorage } = await import('./cachedStorage');
+      const cacheStats = await cachedStorage.getCacheStats();
+      
+      res.json({
+        status: 'healthy',
+        cache: cacheStats
+      });
+    } catch (error) {
+      res.status(503).json({
+        status: 'error',
+        message: 'Cache service not available',
+        error: error.message
+      });
+    }
+  });
+
+  // Cache management endpoints (admin only)
+  app.delete('/api/cache/user/:userId', async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { cachedStorage } = await import('./cachedStorage');
+      
+      await cachedStorage.clearUserCache(userId);
+      
+      res.json({
+        success: true,
+        message: `Cache cleared for user ${userId}`
+      });
+    } catch (error) {
+      res.status(500).json({
+        error: 'Failed to clear user cache',
+        message: error.message
+      });
+    }
+  });
+
+  app.delete('/api/cache/all', async (req, res) => {
+    try {
+      const { cachedStorage } = await import('./cachedStorage');
+      await cachedStorage.clearAllCache();
+      
+      res.json({
+        success: true,
+        message: 'All cache cleared'
+      });
+    } catch (error) {
+      res.status(500).json({
+        error: 'Failed to clear all cache',
+        message: error.message
+      });
+    }
   });
 
   // Job status tracking endpoints
@@ -638,7 +679,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { jobId } = req.params;
       const { getJobStatus } = await import('./queueService');
       
-      const jobStatus = await getJobStatus();
+      const jobStatus = await getJobStatus(jobId);
       
       if (!jobStatus) {
         return res.status(404).json({
@@ -672,11 +713,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      const job = await addJobToQueue();
+      const job = await addJobToQueue(jobType, jobData, 'standard', options);
       
       res.json({
         success: true,
-        jobId: job?.id || 'disabled',
+        jobId: job.id,
         message: `Job added to queue successfully`
       });
     } catch (error) {
@@ -952,11 +993,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // Create job entry for uploaded file (not compressed yet)
           const job = await storage.createCompressionJob({
-            id: `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             userId,
             sessionId,
             originalFilename: file.originalname,
+            originalSize: file.size,
             originalPath,
+            originalFormat,
             status: 'uploaded' // New status for uploaded but not processed
           });
 
@@ -982,10 +1024,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error("Upload error:", error);
-      res.status(500).json({ 
-        error: "Failed to upload files",
-        details: error instanceof Error ? error.message : 'Unknown error'
-      });
+      res.status(500).json({ error: "Failed to upload files" });
     }
   });
 
@@ -1032,12 +1071,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Check usage limits for compressions
       for (const job of jobs) {
-        const dualTracker = new DualUsageTracker(userId, sessionId, userType);
-        const usageCheck = await dualTracker.canPerformOperation(job.originalFilename, job.fileSize || 0, pageIdentifier);
+        const usageCheck = await UsageTracker.checkLimit(user, req, 1, false);
         if (!usageCheck.allowed) {
           return res.status(429).json({
             error: "Usage limit exceeded",
-            message: "You have reached your compression limit",
+            message: usageCheck.message || "You have reached your compression limit",
             usage: usageCheck.usage
           });
         }
@@ -1054,7 +1092,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
           
           // Start async compression and wait for it to complete
-          await processCompressionJob(job.id, job.originalPath, job.originalFilename, settings, userId, sessionId || '', userType, pageIdentifier);
+          await processCompressionJob(job.id, job.originalPath, job.originalFilename, settings, userId, sessionId, userType, pageIdentifier);
           
           // Get the updated job status after compression
           const updatedJob = await storage.getCompressionJob(job.id);
@@ -1067,10 +1105,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
         } catch (error) {
           console.error(`Failed to start processing job ${job.id}:`, error);
-          const errorMessage = error instanceof Error ? error.message : String(error);
           await storage.updateCompressionJob(job.id, { 
             status: 'failed',
-            errorMessage: `Processing failed: ${errorMessage}`
+            errorMessage: `Processing failed: ${error.message}`
           });
         }
       }
@@ -1088,7 +1125,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Compression endpoint for both guest and authenticated users  
   app.post("/api/compress", upload.array('files', 20), requireScopeFromAuth, async (req, res) => {
-    
     try {
       const files = req.files as Express.Multer.File[];
       if (!files || files.length === 0) {
@@ -1111,15 +1147,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user && req.session && req.session.userId) {
         console.log('Using session userId as fallback:', req.session.userId);
         try {
-          const fetchedUser = await storage.getUser(req.session.userId);
-          user = fetchedUser || null;
+          user = await storage.getUser(req.session.userId);
           console.log('Fetched user data from session fallback:', { 
             id: user?.id, 
-            subscriptionTier: user?.subscriptionTier
+            isPremium: user?.isPremium, 
+            subscriptionStatus: user?.subscriptionStatus 
           });
         } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          console.log('Error fetching user from session fallback:', errorMessage);
+          console.log('Error fetching user from session fallback:', error.message);
         }
       }
       
@@ -1189,8 +1224,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // ✅ CRITICAL: Enforce payment requirements for paid pages
       if (pageLimits.requiresPayment && user) {
-        const hasActiveSubscription = user.subscriptionTier === 'premium';
-        const hasValidTestPremium = false; // This property doesn't exist in current schema
+        const hasActiveSubscription = user.isPremium && user.subscriptionStatus === 'active';
+        const hasValidTestPremium = user.testPremiumExpiresAt && new Date(user.testPremiumExpiresAt) > new Date();
         
         // Check specific payment requirements per page
         if (pageIdentifier === 'test-1-dollar' && !hasValidTestPremium) {
@@ -1324,22 +1359,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         settings.compressionAlgorithm = 'standard'; // Use standard instead of aggressive compression
       }
 
+      const results = [];
+      const jobs = [];
+      
       console.log("Compression settings received:", settings);
       console.log("Files to process:", files.map(f => ({ name: f.originalname, ext: f.originalname.split('.').pop() })));
       console.log("=== PROCESSING FILES WITH SHARP + IMAGEMAGICK ===");
       
-      // ✅ OPTIMIZATION: Cache uploaded files for future format conversions
-      const cachedFileIds: string[] = [];
-      for (const file of files) {
-        const cacheId = fileCacheService.cacheFile(file, req.sessionID);
-        cachedFileIds.push(cacheId);
-        console.log(`📁 Cached ${file.originalname} as ${cacheId}`);
-      }
-
-      // ✅ OPTIMIZATION: Batch create all database jobs to reduce round trips
-      const jobPromises = [];
-      const jobMetadata: Array<{ file: any; outputFormat: string }> = [];
-
       // Create database jobs for each file and format combination
       for (const file of files) {
         // Handle multiple output formats
@@ -1354,43 +1380,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
         console.log(`Determined outputFormats: [${outputFormats.join(', ')}]`);
 
-        // Prepare job creation promises for batch execution
+        // Create a separate job for each format
+        console.log(`File: ${file.originalname}, outputFormats array: [${outputFormats.join(', ')}], settings.outputFormat: ${settings.outputFormat}`);
         for (const outputFormat of outputFormats) {
-          console.log(`Preparing compression job for user ${user?.id}, file: ${file.originalname}, format: ${outputFormat}`);
-          
-          const jobPromise = storage.createCompressionJob({
-            id: `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          console.log(`Creating compression job for user ${user?.id}, file: ${file.originalname}, format: ${outputFormat}`);
+          const job = await storage.createCompressionJob({
             userId: user?.id || null,
-            sessionId: req.sessionID,
+            sessionId: req.sessionID, // For guest users
             originalFilename: file.originalname,
+            originalSize: file.size,
             status: "pending",
+            qualityLevel: "custom",
+            resizeOption: settings.resizeOption,
             outputFormat: outputFormat,
             originalPath: file.path,
+            originalFormat: file.mimetype.split('/')[1], // Add required field
+            compressedSize: null,
+            compressionRatio: null,
+            errorMessage: null,
+            compressedPath: null,
           });
           
-          jobPromises.push(jobPromise);
-          jobMetadata.push({ file, outputFormat });
+          console.log(`Created job ${job.id} for user ${user?.id || 'guest'}`);
+          jobs.push({ job, file, outputFormat });
         }
       }
-
-      // ✅ BATCH EXECUTION: Create all jobs simultaneously
-      console.log(`🚀 Creating ${jobPromises.length} jobs in batch...`);
-      const createdJobs = await Promise.all(jobPromises);
       
-      // Combine jobs with metadata
-      const jobs = createdJobs.map((job, index) => ({
-        job,
-        file: jobMetadata[index].file,
-        outputFormat: jobMetadata[index].outputFormat
-      }));
-      
-      console.log(`✅ Created ${jobs.length} jobs in batch`);
-
-      // Process jobs and collect update promises for batch execution
-      const updatePromises = [];
-      const results = [];
-
-      // ✅ OPTIMIZATION: Process all jobs and collect updates for batch execution
+      // Process jobs and update them
       for (const { job, file, outputFormat } of jobs) {
         try {
           // PNG conversion is now enabled for all users including free users
@@ -1424,69 +1440,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Check if this is a RAW file that needs special processing
           const inputFormat = getFileFormat(file.originalname);
           const fileExtName = file.originalname.split('.').pop()?.toLowerCase() || '';
-          const isRawFile = ['dng', 'cr2', 'crw', 'nef', 'arw', 'orf', 'raf', 'rw2'].includes(fileExtName);
+          const isRawFile = ['dng', 'cr2', 'nef', 'arw', 'orf', 'raf', 'rw2'].includes(fileExtName);
           console.log(`File: ${file.originalname}, inputFormat: ${inputFormat}, fileExt: ${fileExtName}, isRawFile: ${isRawFile}`);
           
-          if (isRawFile) {
-            console.log(`🎯 RAW FILE DETECTED: Converting ${file.originalname} with intelligent compression`);
-            
+          let result;
+          if (isRawFile || inputFormat === 'svg' || (inputFormat === 'svg' && outputFormat === 'tiff')) {
+            // Use the EXACT same engine as /professional-formats/convert for RAW files and SVG conversions
+            // SVG needs special handling for rasterization, especially when converting to TIFF
+            console.log(`Using professional formats conversion engine for ${file.originalname} -> ${outputFormat}`);
             try {
-              // Use the new smart conversion method
-              const shouldResize = settings.resizePercentage && settings.resizePercentage < 100;
-              const result = await CompressionEngine.processRawConversionSmart(
+              // Calculate resize dimensions if needed  
+              // Handle both premium page format (resizeOption) and CR2 page format (direct resize parameter)
+              const shouldResize = (settings.resizeOption === 'resize-percentage' && settings.resizePercentage && settings.resizePercentage < 100) ||
+                                   (settings.resize && settings.resizePercentage && settings.resizePercentage < 100);
+              
+              result = await processSpecialFormatConversion(
                 file.path,
                 outputPath,
+                isRawFile ? 'raw' : fileExtName, // Professional formats engine expects 'raw' for all RAW files
                 outputFormat,
                 {
-                  quality: settings.quality || 92,  // Default 92 for RAW
-                  resizePercentage: shouldResize ? settings.resizePercentage : undefined
+                  quality: settings.quality,
+                  resize: shouldResize,
+                  resizePercentage: settings.resizePercentage,
+                  width: 0, // Will be calculated dynamically from actual image dimensions
+                  height: 0, // Will be calculated dynamically from actual image dimensions
+                  maintainAspect: true
                 }
               );
-              
               console.log(`RAW conversion result:`, result);
-              
-              // Use the validated result from the processing engine
-              const originalSize = result.originalSize;
-              const compressedSize = result.processedSize;
-              const compressionRatio = result.compressionRatio;
-              
-              console.log(`📊 RAW Stats: Original ${originalSize} -> Final ${compressedSize} = ${compressionRatio}% reduction`);
-              
-              // Generate thumbnail
-              let thumbnailPath: string | undefined;
-              try {
-                thumbnailPath = await generateThumbnailFromRaw(outputPath, path.dirname(outputPath), jobId);
-                if (thumbnailPath) {
-                  previewUrl = `/api/preview/${jobId}`;
-                  console.log(`✅ Thumbnail generated: ${thumbnailPath}`);
-                }
-              } catch (thumbnailError) {
-                console.warn(`⚠️ Thumbnail generation failed:`, thumbnailError);
-              }
-              
-              // Store with proper stats
-              results.push({
-                id: jobId,
-                originalName: file.originalname,
-                originalSize: result.baselineSize,  // Use baseline size for display
-                compressedSize: result.finalSize,
-                compressionRatio: compressionRatio,
-                downloadUrl: `/api/download/${jobId}`,
-                originalFormat: originalFormat.toUpperCase(),
-                outputFormat: outputFormat.toUpperCase(),
-                wasConverted: true,
-                wasCompressed: result.wasCompressed,
-                ...(previewUrl && { previewUrl })
-              });
-              
-              console.log(`✅ RAW conversion complete for ${file.originalname}`);
-              continue; // Skip standard Sharp processing
-              
             } catch (error) {
-              console.error(`❌ RAW conversion failed for ${file.originalname}:`, error);
-              throw error;
+              console.error(`RAW conversion failed for ${file.originalname}:`, error);
+              throw error; // Re-throw to be caught by the outer error handler
             }
-            
           } else {
             // Use Sharp for standard image formats (JPEG, PNG, WEBP, etc.) - much faster
             let sharpOperation = sharp(file.path);
@@ -1535,61 +1521,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
             result = { success: true, outputSize: stats.size };
           }
           
-          // Get file stats using robust validation (common for both RAW and standard files)
-          let originalStats, compressedStats;
+          // Get file stats
+          const originalStats = await fs.stat(file.path);
+          const compressedStats = await fs.stat(outputPath);
+          // Calculate compression ratio using original file size
+          const compressionRatio = Math.round((1 - compressedStats.size / originalStats.size) * 100);
           
+          // Update job with compression results - wrap in try/catch to prevent database crashes
           try {
-            originalStats = { size: await FileSizeUtils.getFileSizeWithValidation(file.path) };
-            compressedStats = { size: await FileSizeUtils.getFileSizeWithValidation(outputPath) };
-          } catch (sizeError) {
-            console.error(`❌ File size validation failed:`, sizeError);
-            throw new RAWProcessingError(
-              'File size validation failed',
-              RAW_ERROR_CODES.CORRUPTED_FILE,
-              sizeError as Error,
-              'Verify files were processed correctly'
-            );
+            await storage.updateCompressionJob(job.id, {
+              status: "completed",
+              compressedPath: outputPath,
+              compressedSize: compressedStats.size,
+              compressionRatio: compressionRatio,
+              outputFormat: outputFormat, // Store the actual output format
+            });
+          } catch (dbError) {
+            console.error(`Database update failed for job ${job.id}:`, dbError);
+            // Continue processing even if database update fails
           }
-          
-          // Debug logging for NaN detection
-          console.log(`📊 STATS DEBUG for ${file.originalname}:`);
-          console.log(`- originalStats.size: ${originalStats.size} (${FileSizeUtils.formatFileSize(originalStats.size)})`);
-          console.log(`- compressedStats.size: ${compressedStats.size} (${FileSizeUtils.formatFileSize(compressedStats.size)})`);
-          console.log(`- result type: ${typeof result}`);
-          
-          // Calculate compression ratio using safe math
-          const compressionRatio = SafeMath.compressionRatio(originalStats.size, compressedStats.size);
-          
-          console.log(`🔢 CALCULATED compressionRatio: ${compressionRatio}% (Safe calculation)`);
-          
-          // Validate final compression ratio
-          if (!isFinite(compressionRatio)) {
-            console.error(`❌ COMPRESSION RATIO IS NOT FINITE! originalSize: ${originalStats.size}, compressedSize: ${compressedStats.size}`);
-            throw new RAWProcessingError(
-              'Compression ratio calculation failed',
-              RAW_ERROR_CODES.NAN_CALCULATION,
-              undefined,
-              'File processing may have failed silently'
-            );
-          }
-            
-          console.log(`Conversion stats for ${file.originalname} - Original: ${originalStats.size}, Final: ${compressedStats.size}, Ratio: ${compressionRatio}%`);
-          
-          // ✅ OPTIMIZATION: Collect job updates for batch execution
-          const jobUpdate = storage.updateCompressionJob(job.id, {
-            status: "completed",
-            compressedPath: outputPath,
-            compressedSize: compressedStats.size,
-            compressionRatio: compressionRatio,
-            outputFormat: outputFormat,
-          });
-          updatePromises.push(jobUpdate);
 
           const resultData = {
             id: job.id, // Use actual job ID
             originalName: file.originalname,
-            originalSize: originalStats.size,  // Ensure this is always set with validation
-            compressedSize: compressedStats.size,  // Ensure this is always set with validation
+            originalSize: originalStats.size,
+            compressedSize: compressedStats.size,
             compressionRatio,
             downloadUrl: `/api/download/${job.id}`,
             originalFormat: file.mimetype.split('/')[1].toUpperCase(),
@@ -1605,27 +1561,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           };
 
-          // Final validation using industry-standard validation patterns
-          console.log(`🔍 FINAL VALIDATION for ${file.originalname}:`);
-          console.log(`- resultData.originalSize: ${resultData.originalSize} (${FileSizeUtils.formatFileSize(resultData.originalSize)})`);
-          console.log(`- resultData.compressedSize: ${resultData.compressedSize} (${FileSizeUtils.formatFileSize(resultData.compressedSize)})`);
-          console.log(`- resultData.compressionRatio: ${resultData.compressionRatio}%`);
-          
-          // Comprehensive validation using the new validation utility
-          const numericFields = ['originalSize', 'compressedSize', 'compressionRatio'];
-          for (const field of numericFields) {
-            const value = resultData[field as keyof typeof resultData] as number;
-            if (typeof value !== 'number' || !isFinite(value)) {
-              console.error(`❌ INVALID ${field}: ${value} (type: ${typeof value})`);
-              throw new RAWProcessingError(
-                `Invalid ${field}: ${value}`,
-                RAW_ERROR_CODES.NAN_CALCULATION,
-                undefined,
-                'File processing validation failed'
-              );
-            }
-          }
-
           console.log(`${outputFormat.toUpperCase()} compression result for ${file.originalname}:`, {
             size: `${originalStats.size} -> ${compressedStats.size}`,
             ratio: `${compressionRatio}%`,
@@ -1635,12 +1570,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
         } catch (jobError) {
           console.error(`Error compressing ${file.originalname} to ${outputFormat}:`, jobError);
-          // ✅ OPTIMIZATION: Collect error updates for batch execution
-          const errorUpdate = storage.updateCompressionJob(job.id, {
-            status: "failed",
-            errorMessage: jobError instanceof Error ? jobError.message : "Compression failed",
-          });
-          updatePromises.push(errorUpdate);
+          // Update job with error - wrap in try/catch to prevent secondary crashes
+          try {
+            await storage.updateCompressionJob(job.id, {
+              status: "failed",
+              errorMessage: jobError instanceof Error ? jobError.message : "Compression failed",
+            });
+          } catch (dbError) {
+            console.error(`Database update failed for failed job ${job.id}:`, dbError);
+          }
           
           results.push({
             id: job.id,
@@ -1648,16 +1586,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             error: "Compression failed"
           });
         }
-      }
-
-      // ✅ BATCH EXECUTION: Execute all database updates simultaneously
-      console.log(`🚀 Executing ${updatePromises.length} database updates in batch...`);
-      try {
-        await Promise.allSettled(updatePromises); // Use allSettled to handle partial failures
-        console.log(`✅ Completed ${updatePromises.length} database updates in batch`);
-      } catch (batchError) {
-        console.error('Batch database update error:', batchError);
-        // Continue processing even if some updates fail
       }
       
       // Clean up original uploaded files (only after processing all formats)
@@ -1706,8 +1634,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ 
         results,
         batchId: batchId,
-        batchDownloadUrl: `/api/download-zip/${batchId}`,
-        cachedFileIds: cachedFileIds // ✅ OPTIMIZATION: Include cached file IDs for future conversions
+        batchDownloadUrl: `/api/download-zip/${batchId}`
       });
       
     } catch (error) {
@@ -1716,209 +1643,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ✅ OPTIMIZATION: Intelligent engine selection for maximum performance
-  function getOptimalEngine(inputFormat: string, outputFormat: string): 'sharp' | 'imagemagick' | 'dcraw' {
-    const rawFormats = ['dng', 'cr2', 'nef', 'arw', 'orf', 'raf', 'rw2'];
-    const sharpFormats = ['jpg', 'jpeg', 'png', 'webp', 'avif'];
-    
-    // RAW files always use dcRAW
-    if (rawFormats.includes(inputFormat.toLowerCase())) {
-      return 'dcraw';
-    }
-    
-    // SVG or TIFF operations use ImageMagick
-    if (inputFormat === 'svg' || outputFormat === 'tiff' || inputFormat === 'tiff') {
-      return 'imagemagick';
-    }
-    
-    // Standard formats use Sharp (fastest)
-    if (sharpFormats.includes(inputFormat.toLowerCase()) && sharpFormats.includes(outputFormat.toLowerCase())) {
-      return 'sharp';
-    }
-    
-    // Default to ImageMagick for complex conversions
-    return 'imagemagick';
-  }
-
-  // ✅ OPTIMIZATION: Sharp processing (fastest for standard formats)
-  async function processWithSharp(inputPath: string, outputPath: string, outputFormat: string, settings: any) {
-    let sharpOperation = sharp(inputPath);
-    
-    // Apply resize if specified
-    if (settings?.resizeOption === 'resize-percentage' && settings?.resizePercentage && settings.resizePercentage < 100) {
-      const metadata = await sharpOperation.metadata();
-      if (metadata.width && metadata.height) {
-        const targetWidth = Math.round(metadata.width * (settings.resizePercentage / 100));
-        const targetHeight = Math.round(metadata.height * (settings.resizePercentage / 100));
-        sharpOperation = sharpOperation.resize(targetWidth, targetHeight, {
-          fit: 'inside',
-          withoutEnlargement: true
-        });
-      }
-    }
-    
-    // Format-specific optimization
-    const formatOptions: any = {
-      quality: settings?.quality || 80,
-      ...(outputFormat === 'png' && { compressionLevel: 8 }),
-      ...(outputFormat === 'webp' && { effort: 4 }), // Fast WebP
-      ...(outputFormat === 'avif' && { effort: 2 }), // Fast AVIF
-    };
-    
-    await sharpOperation
-      .toFormat(outputFormat as keyof sharp.FormatEnum, formatOptions)
-      .toFile(outputPath);
-      
-    return { success: true, engine: 'sharp' };
-  }
-
-  // ✅ OPTIMIZATION: ImageMagick processing (for TIFF/SVG)
-  async function processWithImageMagick(inputPath: string, outputPath: string, outputFormat: string, settings: any) {
-    const execAsync = promisify(exec);
-    const quality = settings?.quality || 80;
-    
-    let command = `magick "${inputPath}"`;
-    
-    // Add resize if specified
-    if (settings?.resizeOption === 'resize-percentage' && settings?.resizePercentage && settings.resizePercentage < 100) {
-      command += ` -resize ${settings.resizePercentage}%`;
-    }
-    
-    // Add quality
-    command += ` -quality ${quality}`;
-    
-    // TIFF-specific optimizations
-    if (outputFormat === 'tiff') {
-      command += ` -compress lzw`;
-    }
-    
-    command += ` "${outputPath}"`;
-    
-    await execAsync(command);
-    return { success: true, engine: 'imagemagick' };
-  }
-
-  // ✅ OPTIMIZATION: Format conversion using cached files (avoids re-upload)
-  app.post("/api/convert-cached", requireScopeFromAuth, async (req, res) => {
-    try {
-      const { cachedFileIds, outputFormat, settings } = req.body;
-      
-      if (!cachedFileIds || !Array.isArray(cachedFileIds) || cachedFileIds.length === 0) {
-        return res.status(400).json({ error: "No cached file IDs provided" });
-      }
-      
-      if (!outputFormat) {
-        return res.status(400).json({ error: "Output format not specified" });
-      }
-
-      console.log(`🔄 Converting ${cachedFileIds.length} cached files to ${outputFormat}`);
-      
-      // Get cached files
-      const cachedFiles = [];
-      for (const fileId of cachedFileIds) {
-        const cached = fileCacheService.getCachedFile(fileId);
-        if (!cached) {
-          return res.status(404).json({ 
-            error: `Cached file not found: ${fileId}` 
-          });
-        }
-        cachedFiles.push({ fileId, cached });
-      }
-
-      // Validate session access
-      const sessionId = req.sessionID;
-      const hasAccess = cachedFiles.every(({cached}) => cached.sessionId === sessionId);
-      if (!hasAccess) {
-        return res.status(403).json({ error: "Access denied to cached files" });
-      }
-
-      // Process conversions
-      const results = [];
-      const jobs = [];
-
-      // Create database jobs
-      for (const {fileId, cached} of cachedFiles) {
-        const job = await storage.createCompressionJob({
-          userId: req.user?.id || null,
-          sessionId: sessionId,
-          originalFilename: cached.originalName,
-          status: "pending",
-          outputFormat: outputFormat,
-          originalPath: cached.originalPath,
-        });
-        jobs.push({ job, cached, fileId });
-      }
-
-      // Process conversions with optimal engine selection
-      for (const { job, cached } of jobs) {
-        try {
-          const inputFormat = cached.originalName.split('.').pop()?.toLowerCase() || '';
-          const engine = getOptimalEngine(inputFormat, outputFormat);
-          
-          console.log(`🔧 Converting ${cached.originalName} using ${engine} engine: ${inputFormat} → ${outputFormat}`);
-          
-          const outputPath = path.join("compressed", `${job.id}.${outputFormat}`);
-          
-          let result;
-          if (engine === 'sharp') {
-            result = await processWithSharp(cached.originalPath, outputPath, outputFormat, settings);
-          } else if (engine === 'imagemagick') {
-            result = await processWithImageMagick(cached.originalPath, outputPath, outputFormat, settings);
-          } else {
-            result = await processSpecialFormatConversion(cached.originalPath, outputPath, inputFormat, outputFormat, settings);
-          }
-
-          // Update job
-          const originalStats = await fs.stat(cached.originalPath);
-          const compressedStats = await fs.stat(outputPath);
-          const compressionRatio = originalStats.size > 0 
-            ? Math.round((1 - compressedStats.size / originalStats.size) * 100)
-            : 0; // Prevent NaN when original size is 0
-          
-          await storage.updateCompressionJob(job.id, {
-            status: "completed",
-            compressedPath: outputPath,
-            compressedSize: compressedStats.size,
-            compressionRatio: compressionRatio,
-            outputFormat: outputFormat,
-          });
-
-          results.push({
-            id: job.id,
-            originalName: cached.originalName,
-            originalSize: originalStats.size,
-            compressedSize: compressedStats.size,
-            compressionRatio,
-            downloadUrl: `/api/download/${job.id}`,
-            originalFormat: cached.mimetype.split('/')[1]?.toUpperCase() || 'UNKNOWN',
-            outputFormat: outputFormat.toUpperCase(),
-            wasConverted: true,
-            engine: engine
-          });
-
-        } catch (error) {
-          console.error(`Conversion failed for ${cached.originalName}:`, error);
-          await storage.updateCompressionJob(job.id, {
-            status: "failed",
-            error: error.message
-          });
-          
-          results.push({
-            error: `Failed to convert ${cached.originalName}: ${error.message}`,
-            originalName: cached.originalName
-          });
-        }
-      }
-
-      res.json({ results });
-      
-    } catch (error) {
-      console.error("Cached conversion error:", error);
-      res.status(500).json({ error: "Cached conversion failed" });
-    }
-  });
-
-  // Download endpoint for compressed files by job ID - OPTIMIZED FOR SPEED
+  // Download endpoint for compressed files by job ID
   app.get("/api/download/compressed/:jobId", async (req, res) => {
     try {
       const jobId = req.params.jobId;
@@ -1928,68 +1653,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Compressed file not found" });
       }
       
-      // Generate user-friendly filename
+      // Generate a user-friendly filename
       const originalName = job.originalFilename;
       const outputFormat = job.outputFormat || 'jpeg';
       const extension = outputFormat === 'jpeg' ? '.jpg' : `.${outputFormat}`;
       const baseName = path.parse(originalName).name;
       const downloadName = `${baseName}_compressed${extension}`;
       
-      // Priority 1: CDN redirect (fastest option)
+      // Priority 1: If CDN URL is available, redirect to it with download headers
       if (job.cdnUrl) {
-        console.log(`🌐 CDN redirect: ${job.cdnUrl}`);
+        console.log(`🌐 Redirecting download to CDN: ${job.cdnUrl}`);
+        // For downloads from CDN, we redirect with appropriate headers
         res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`);
-        res.setHeader('Cache-Control', 'public, max-age=86400'); // 24h cache
-        return res.redirect(301, job.cdnUrl); // Permanent redirect for better caching
+        return res.redirect(302, job.cdnUrl);
       }
       
-      // Priority 2: Optimized local file streaming
+      // Priority 2: Fallback to local file download
       if (!job.compressedPath) {
         return res.status(404).json({ error: "Compressed file not found" });
       }
       
-      // Get file stats efficiently
-      const stats = await fs.stat(job.compressedPath);
+      // Check if local file exists
+      await fs.access(job.compressedPath);
       
-      // Set optimized headers
+      // Set proper headers for download
       res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`);
       res.setHeader('Content-Type', 'application/octet-stream');
-      res.setHeader('Content-Length', stats.size.toString());
-      res.setHeader('Cache-Control', 'public, max-age=3600'); // 1h cache
-      res.setHeader('Accept-Ranges', 'bytes'); // Enable resume support
       
-      // Handle range requests for resumable downloads
-      const range = req.headers.range;
-      if (range) {
-        const [start, end] = range.replace(/bytes=/, "").split("-").map(Number);
-        const actualEnd = end || stats.size - 1;
-        const contentLength = actualEnd - start + 1;
-        
-        res.status(206);
-        res.setHeader('Content-Range', `bytes ${start}-${actualEnd}/${stats.size}`);
-        res.setHeader('Content-Length', contentLength.toString());
-        
-        const fileStream = createReadStream(job.compressedPath, { 
-          start, 
-          end: actualEnd,
-          highWaterMark: 1024 * 1024 // 1MB chunks for large files
-        });
-        fileStream.pipe(res);
-      } else {
-        // Full file download with optimized streaming
-        const fileStream = createReadStream(job.compressedPath, {
-          highWaterMark: 1024 * 1024 // 1MB chunks (was default 64KB)
-        });
-        fileStream.pipe(res);
-      }
-      
-      console.log(`📁 Optimized download: ${job.compressedPath} (${(stats.size/1024/1024).toFixed(2)}MB)`);
-      
+      console.log(`📁 Serving local download: ${job.compressedPath}`);
+      res.download(job.compressedPath, downloadName, (err) => {
+        if (err) {
+          console.error("Download error:", err);
+          if (!res.headersSent) {
+            res.status(404).json({ error: "File not found" });
+          }
+        }
+      });
     } catch (error) {
-      console.error("Download error:", error);
-      if (!res.headersSent) {
-        res.status(404).json({ error: "File not found" });
-      }
+      console.error("File access error:", error);
+      res.status(404).json({ error: "File not found" });
     }
   });
 
@@ -2101,15 +1803,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const zipFilename = `microjpeg_batch_compress_${Date.now()}.zip`;
       res.setHeader('Content-Type', 'application/zip');
       res.setHeader('Content-Disposition', `attachment; filename="${zipFilename}"`);
-      res.setHeader('Transfer-Encoding', 'chunked'); // Enable streaming
       
-      // Create optimized zip archive - SPEED OPTIMIZED
+      // Create zip archive
       const archive = archiver('zip', {
-        zlib: { 
-          level: 6, // Balanced compression (was 9 - too slow!)
-          chunkSize: 64 * 1024 // 64KB chunks
-        },
-        statConcurrency: 4 // Process 4 files concurrently
+        zlib: { level: 9 } // Best compression
       });
       
       // Handle archive errors
@@ -2283,8 +1980,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { password, ...userWithoutPassword } = user;
       res.json(userWithoutPassword);
     } catch (error) {
-      console.error("Database error in /api/auth/user:", error);
-      res.status(500).json({ message: "Internal server error" });
+      console.error("Authentication error:", error);
+      res.status(401).json({ message: "Unauthorized" });
     }
   });
 
@@ -2332,174 +2029,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ✅ USER-TYPE-BASED UNIVERSAL COUNTER API - OPTIMIZED WITH CACHING
+  // ✅ USER-TYPE-BASED UNIVERSAL COUNTER API - NO CACHE FOR REAL-TIME UPDATES
   app.get('/api/universal-usage-stats', async (req, res) => {
     try {
-      // Set shorter cache for performance balance
-      res.setHeader('Cache-Control', 'public, max-age=10'); // 10 second cache
+      // Disable caching for real-time updates
+      res.setHeader('Cache-Control', 'no-store');
       
       const sessionId = req.sessionID;
       const userId = req.user?.id;
       
-      // Create cache key for this specific request
-      const cacheKey = `universal_stats_${userId || 'anon'}_${sessionId}`;
-      
-      // Check if we have a cached response
-      const cached = global.universalStatsCache?.get(cacheKey);
-      if (cached && (Date.now() - cached.timestamp) < 15000) { // 15 second cache
-        console.log('⚡ Using cached universal stats for performance');
-        return res.json(cached.data);
-      }
-      
-      // Initialize cache if not exists
-      if (!global.universalStatsCache) {
-        global.universalStatsCache = new Map();
-      }
-      
-      // Determine user type and bonus status with timeout
+      // Determine user type and bonus status
       let userType = 'anonymous';
       let hasBonusOperations = false;
-      
       if (userId) {
-        try {
-          // Add timeout to prevent hanging
-          const userPromise = storage.getUser(userId);
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('User lookup timeout')), 3000)
-          );
-          
-          const user = await Promise.race([userPromise, timeoutPromise]);
-          userType = user?.subscriptionTier || 'free';
-          hasBonusOperations = (user?.purchasedCredits || 0) > 0;
-        } catch (error) {
-          console.error("Error getting user in universal-usage-stats (using fallback):", error);
-          userType = 'anonymous'; // Fallback to anonymous
-        }
+        const user = await storage.getUser(userId);
+        userType = user?.subscriptionTier || 'free';
+        hasBonusOperations = (user?.purchasedCredits || 0) > 0;
       }
       
-      // Create tracker instance with timeout protection
-      try {
-        const tracker = new DualUsageTracker(userId, sessionId, userType);
-        
-        // Add timeout to prevent hanging on stats
-        const statsPromise = tracker.getUsageStats();
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Stats lookup timeout')), 5000)
-        );
-        
-        const stats = await Promise.race([statsPromise, timeoutPromise]);
-        
-        // Apply bonus operations for signed-in free users who have claimed it
-        if (userType === 'free_registered' && hasBonusOperations) {
-          stats.regular.monthly.limit = 600;
-          stats.combined.monthly.limit = stats.raw.monthly.limit + 600;
-        }
-        
-        const response = {
-          userType,
-          stats,
-          limits: OPERATION_CONFIG.limits[userType as keyof typeof OPERATION_CONFIG.limits]
-        };
-        
-        // Cache the successful response
-        global.universalStatsCache.set(cacheKey, {
-          data: response,
-          timestamp: Date.now()
-        });
-        
-        // Clean old cache entries (keep only last 100)
-        if (global.universalStatsCache.size > 100) {
-          const entries = Array.from(global.universalStatsCache.entries());
-          const oldEntries = entries.slice(0, entries.length - 100);
-          oldEntries.forEach(([key]) => global.universalStatsCache.delete(key));
-        }
-        
-        console.log(`⚡ Stats API completed: userId=${userId}, userType=${userType}`);
-        res.json(response);
-        
-      } catch (statsError) {
-        console.error('Stats lookup failed, using fallback:', statsError);
-        
-        // Return safe fallback stats immediately
-        const fallbackResponse = {
-          userType,
-          stats: {
-            regular: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1000 } },
-            raw: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1000 } },
-            combined: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1000 } }
-          },
-          limits: OPERATION_CONFIG.limits[userType as keyof typeof OPERATION_CONFIG.limits] || OPERATION_CONFIG.limits.anonymous
-        };
-        
-        res.json(fallbackResponse);
+      // Create tracker instance - use exact same logic as recordOperation
+      const tracker = new DualUsageTracker(userId, sessionId, userType);
+      const stats = await tracker.getUsageStats();
+      
+      // Apply bonus operations for signed-in free users who have claimed it
+      if (userType === 'free_registered' && hasBonusOperations) {
+        stats.regular.monthly.limit = 600;
+        stats.combined.monthly.limit = stats.raw.monthly.limit + 600;
       }
       
-    } catch (error) {
-      console.error('Critical error in universal-usage-stats:', error);
+      // Debug logging to trace the issue
+      console.log(`🔧 Stats API called: userId=${userId}, sessionId=${sessionId}, userType=${userType}`);
+      console.log(`🔧 Stats returned:`, JSON.stringify(stats, null, 2));
       
-      // Return safe fallback immediately
       res.json({
-        userType: 'anonymous',
-        stats: {
-          regular: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1000 } },
-          raw: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1000 } },
-          combined: { daily: { used: 0, limit: 100 }, monthly: { used: 0, limit: 1000 } }
-        },
-        limits: OPERATION_CONFIG.limits.anonymous
+        userType,
+        stats,
+        limits: OPERATION_CONFIG.limits[userType as keyof typeof OPERATION_CONFIG.limits]
       });
+    } catch (error) {
+      console.error('Error fetching usage stats:', error);
+      res.status(500).json({ error: 'Failed to fetch usage stats' });
     }
   });
 
   // Check before processing
   app.post('/api/check-operation', async (req, res) => {
-    try {
-      console.log('🔧 /api/check-operation called with:', req.body);
-      
-      const { filename, fileSize, pageIdentifier } = req.body;
-      const sessionId = req.sessionID;
-      const userId = req.user?.id;
-      
-      console.log('🔧 Check operation params:', { 
-        filename, 
-        fileSize, 
-        pageIdentifier: pageIdentifier || 'not provided',
-        sessionId, 
-        userId: userId || 'anonymous' 
-      });
-      
-      let userType = 'anonymous';
-      if (userId) {
-        try {
-          const user = await storage.getUser(userId);
-          userType = user?.subscriptionTier || 'free';
-        } catch (error) {
-          console.error("Error getting user in check-operation:", error);
-          userType = 'anonymous'; // Fallback to anonymous
-        }
-      }
-      
-      console.log('🔧 Determined userType:', userType);
-      
-      const tracker = new DualUsageTracker(userId, sessionId, userType);
-      
-      console.log('🔧 About to call canPerformOperation...');
-      const result = await tracker.canPerformOperation(filename, fileSize, pageIdentifier);
-      
-      console.log('🔧 canPerformOperation result:', result);
-      res.json(result);
-    } catch (error) {
-      console.error("Error in /api/check-operation:", error);
-      console.error("Error stack:", error instanceof Error ? error.stack : 'No stack trace');
-      res.status(500).json({ 
-        message: "Internal server error",
-        allowed: false,
-        reason: "Server error"
-      });
+    const { filename, fileSize, pageIdentifier } = req.body;
+    const sessionId = req.sessionID;
+    const userId = req.user?.id;
+    
+    let userType = 'anonymous';
+    if (userId) {
+      const user = await storage.getUser(userId);
+      userType = user?.subscriptionTier || 'free';
     }
+    
+    const tracker = new DualUsageTracker(userId, sessionId, userType);
+    const result = await tracker.canPerformOperation(filename, fileSize, pageIdentifier);
+    
+    res.json(result);
   });
 
   // ✅ UNIFIED PAGE-AWARE USAGE STATS API
-  app.get('/api/usage-stats/:pageIdentifier?', async (req, res) => {
+  app.get('/api/usage-stats/:pageIdentifier', async (req, res) => {
     try {
       console.log(`🔧 UNIFIED USAGE STATS: pageIdentifier=${req.params.pageIdentifier}`);
       const { pageIdentifier } = req.params;
@@ -3981,7 +3573,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const job = await storage.createCompressionJob({
           userId, // Add userId for user association
           originalFilename: file.originalname,
+          originalSize: file.size,
           status: "pending",
+          qualityLevel,
+          resizeOption,
           outputFormat,
           originalPath: file.path,
           compressedSize: null,
@@ -4249,14 +3844,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         res.setHeader('Content-Type', contentType);
         res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`);
-        res.setHeader('Content-Length', stats.size.toString());
-        res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
-        res.setHeader('Accept-Ranges', 'bytes'); // Enable resume support
+        res.setHeader('Content-Length', stats.size);
         
-        // Optimized streaming with large chunks
-        const fileStream = createReadStream(filePath, {
-          highWaterMark: 1024 * 1024 // 1MB chunks for faster streaming
-        });
+        const fileStream = createReadStream(filePath);
         fileStream.pipe(res);
         
         console.log(`Special format download: ${filePath} (${stats.size} bytes) as ${downloadName}`);
@@ -4548,7 +4138,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (const file of files) {
         const job = await storage.createCompressionJob({
           originalFilename: file.originalname,
+          originalSize: file.size,
           status: "pending",
+          qualityLevel: "custom",
+          resizeOption: "none",
           outputFormat: "jpeg",
           originalPath: file.path,
           compressedSize: null,
@@ -5454,8 +5047,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
   // Payment processing routes
-  // app.post('/api/payment/razorpay/create-order', isAuthenticated, createRazorpayOrder); // DISABLED: Razorpay not needed
-  // app.post('/api/payment/razorpay/verify', isAuthenticated, verifyRazorpayPayment); // DISABLED: Razorpay not needed
+  app.post('/api/payment/razorpay/create-order', isAuthenticated, createRazorpayOrder);
+  app.post('/api/payment/razorpay/verify', isAuthenticated, verifyRazorpayPayment);
   app.post('/api/payment/paypal/process', isAuthenticated, processPayPalPayment);
   app.get('/api/subscription/status', isAuthenticated, getSubscriptionStatus);
   app.post('/api/subscription/cancel', isAuthenticated, cancelSubscription);
@@ -6084,60 +5677,28 @@ async function processSpecialFormatConversion(
   try {
     // Handle different input formats
     if (inputFormat === 'raw') {
-      console.log(`Converting RAW file ${inputPath} to ${outputFormat}...`);
+      // For RAW files, use dcraw to extract to PPM, then convert with ImageMagick
+      // This bypasses ImageMagick's TIFF parsing issues with RAW files
+      console.log(`Converting RAW file ${inputPath} to ${outputFormat} using dcraw_emu + ImageMagick...`);
       
       // Verify input file exists before conversion
       const inputExists = await fs.access(inputPath).then(() => true).catch(() => false);
       console.log(`Input file exists: ${inputExists}`);
       
-      try {
-        // First, try using dcraw_emu (external command) for best compatibility
-        console.log(`Attempting RAW conversion using dcraw_emu + ImageMagick...`);
-        
-        // Step 1: Use dcraw_emu (from libraw) to extract RAW to TIFF format
-        const dcrawCommand = `dcraw_emu -w -T "${inputPath}"`;
-        console.log(`Running dcraw_emu command: ${dcrawCommand}`);
-        await execAsync(dcrawCommand);
-        
-        // dcraw_emu creates a .tiff file with the same base name
-        const baseName = inputPath.replace(/\.[^/.]+$/, "");
-        const tempTiffPath = baseName + '.tiff';
-        console.log(`Expected TIFF output: ${tempTiffPath}`);
-        
-        // Verify TIFF file was created
-        const tiffExists = await fs.access(tempTiffPath).then(() => true).catch(() => false);
-        if (!tiffExists) {
-          throw new Error('dcraw_emu did not create expected TIFF file');
-        }
-        
-        console.log(`✅ dcraw_emu conversion successful, proceeding with ImageMagick...`);
-        
-        // Continue with existing ImageMagick processing logic...
-        
-      } catch (dcrawEmuError) {
-        console.log(`⚠️ dcraw_emu failed: ${dcrawEmuError instanceof Error ? dcrawEmuError.message : String(dcrawEmuError)}`);
-        console.log(`🔄 Falling back to Node.js dcraw package...`);
-        
-        try {
-          // Use the new smart conversion method for better results
-          const smartResult = await CompressionEngine.processRawConversionSmart(
-            inputPath, 
-            outputPath, 
-            outputFormat, 
-            {
-              quality: options.quality || 92,
-              resizePercentage: options.resizePercentage
-            }
-          );
-          
-          console.log(`✅ Smart RAW conversion completed`);
-          return { success: true, outputSize: smartResult.processedSize };
-          
-        } catch (smartError) {
-          console.error(`❌ Smart RAW conversion failed: ${smartError instanceof Error ? smartError.message : String(smartError)}`);
-          throw new Error(`Failed to convert raw to ${outputFormat}: ${smartError instanceof Error ? smartError.message : String(smartError)}`);
-        }
-      }
+      // Step 1: Use dcraw_emu (from libraw) to extract RAW to PPM format (uncompressed RGB)
+      const tempPpmPath = inputPath + '_temp.ppm';
+      const dcrawCommand = `dcraw_emu -w -T "${inputPath}"`;
+      console.log(`Running dcraw_emu command: ${dcrawCommand}`);
+      await execAsync(dcrawCommand);
+      
+      // dcraw_emu creates a .tiff file with the same base name
+      const baseName = inputPath.replace(/\.[^/.]+$/, "");
+      const tempTiffPath = baseName + '.tiff';
+      console.log(`Expected TIFF output: ${tempTiffPath}`);
+      
+      // Verify TIFF file was created
+      const tiffExists = await fs.access(tempTiffPath).then(() => true).catch(() => false);
+      console.log(`TIFF file created: ${tiffExists}`);
       
       // Step 2: Convert TIFF to final format using ImageMagick with compression
       let convertCommand;
@@ -6432,7 +5993,14 @@ export function registerResetEndpoints(app: Express) {
         `monthly:${sessionId}:${pageIdentifier}`
       ];
 
-      // Redis cache cleared - Redis has been eliminated
+      // Clear Redis cache if it exists
+      if (safeRedis) {
+        for (const key of cacheKeys) {
+          await safeRedis.del(key);
+          console.log(`🔧 DEV: Cleared cache key: ${key}`);
+        }
+        clearedSystems++;
+      }
 
       // Clear database entries
       try {
@@ -6482,7 +6050,7 @@ export function registerResetEndpoints(app: Express) {
           sessionId,
           pageIdentifier,
           systems: clearedSystems,
-          redisEliminated: true,
+          redisKeys: cacheKeys.length,
           database: ['anonymousSessionScopes', 'userUsage', 'operationLog']
         }
       });
