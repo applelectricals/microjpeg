@@ -1412,8 +1412,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Check if this is a RAW file that needs special processing
           const inputFormat = getFileFormat(file.originalname);
           const fileExtName = file.originalname.split('.').pop()?.toLowerCase() || '';
-          const isRawFile = ['dng', 'cr2', 'nef', 'arw', 'orf', 'raf', 'rw2'].includes(fileExtName);
+          const isRawFile = ['dng', 'cr2', 'crw', 'nef', 'arw', 'orf', 'raf', 'rw2'].includes(fileExtName);
           console.log(`File: ${file.originalname}, inputFormat: ${inputFormat}, fileExt: ${fileExtName}, isRawFile: ${isRawFile}`);
+          
+          if (isRawFile) {
+            console.log(`🎯 RAW FILE DETECTED: Converting ${file.originalname} with 100% quality (NO COMPRESSION)`);
+          }
           
           let result;
           if (isRawFile || inputFormat === 'svg' || (inputFormat === 'svg' && outputFormat === 'tiff')) {
@@ -6024,14 +6028,13 @@ async function processSpecialFormatConversion(
         console.log(`🔄 Falling back to Node.js dcraw package...`);
         
         try {
-          // Fallback: Use Node.js dcraw package from CompressionEngine
-          await CompressionEngine.processRawWithDcraw(inputPath, outputPath, outputFormat, {
-            quality: options.quality || 80,
+          // Use simplified conversion-only method (100% quality, no compression)
+          await CompressionEngine.processRawConversionOnly(inputPath, outputPath, outputFormat, {
             width: options.width,
             height: options.height
           });
           
-          console.log(`✅ RAW conversion completed using Node.js dcraw fallback`);
+          console.log(`✅ RAW conversion completed (100% quality, no compression)`);
           return { finalSize: (await fs.stat(outputPath)).size };
           
         } catch (dcrawNodeError) {

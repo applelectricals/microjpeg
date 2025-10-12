@@ -4490,6 +4490,7 @@ var import_fs = require("fs");
 var import_path = __toESM(require("path"), 1);
 var import_child_process = require("child_process");
 var import_util = require("util");
+var import_meta = {};
 import_sharp.default.cache({
   memory: 512,
   // Use only 512MB cache to prevent memory pressure
@@ -4501,24 +4502,120 @@ import_sharp.default.cache({
 import_sharp.default.concurrency(1);
 import_sharp.default.simd(true);
 console.log("\u{1F680} Ultra-Stable Sharp Performance: 512MB cache, 1 CPU core, SIMD enabled");
-var dcraw;
-try {
-  if (typeof require !== "undefined") {
-    dcraw = require("dcraw");
+var dcraw = null;
+async function loadDcraw() {
+  if (dcraw === null) {
+    try {
+      const { createRequire } = await import("module");
+      const require2 = createRequire(import_meta.url);
+      dcraw = require2("dcraw");
+      console.log("\u2705 dcraw package loaded successfully");
+    } catch (error) {
+      console.log("dcraw not available, RAW processing disabled");
+      dcraw = false;
+    }
   }
-} catch (error) {
-  console.log("dcraw not available, RAW processing disabled");
-  dcraw = null;
+  return dcraw;
 }
 var execAsync = (0, import_util.promisify)(import_child_process.exec);
 var CompressionEngine = class _CompressionEngine {
+  /**
+   * Process RAW files using dcraw.js - conversion only (no compression)
+   * Maintains 100% quality for conversion without compression
+   */
+  static async processRawConversionOnly(inputPath, outputPath, outputFormat, options = {}) {
+    const { width, height } = options;
+    try {
+      const dcrawModule = await loadDcraw();
+      if (!dcrawModule) {
+        throw new Error("dcraw not available in this environment");
+      }
+      console.log(`\u{1F3AF} RAW Conversion Only (100% quality): ${inputPath} -> ${outputPath}`);
+      const rawBuffer = await import_fs.promises.readFile(inputPath);
+      const dcrawOptions = {
+        exportAsTiff: true,
+        use16BitLinearMode: false,
+        // Use 8-bit for compatibility
+        useExportMode: true,
+        noAutoBrightness: false,
+        // Allow auto brightness for better results
+        verbose: false
+      };
+      const result = dcrawModule(rawBuffer, dcrawOptions);
+      if (!result || result.length === 0) {
+        throw new Error("dcraw processing returned empty result");
+      }
+      console.log(`\u2705 dcraw processed ${rawBuffer.length} bytes -> ${result.length} bytes`);
+      let sharpInstance = (0, import_sharp.default)(result);
+      if (width || height) {
+        sharpInstance = sharpInstance.resize(width, height, {
+          fit: "inside",
+          withoutEnlargement: true
+        });
+      }
+      switch (outputFormat.toLowerCase()) {
+        case "jpeg":
+        case "jpg":
+          await sharpInstance.jpeg({
+            quality: 100,
+            // MAXIMUM QUALITY
+            progressive: false,
+            mozjpeg: false,
+            optimiseCoding: false,
+            trellisQuantisation: false
+          }).toFile(outputPath);
+          break;
+        case "png":
+          await sharpInstance.png({
+            quality: 100,
+            // MAXIMUM QUALITY  
+            compressionLevel: 0,
+            // NO COMPRESSION
+            progressive: false
+          }).toFile(outputPath);
+          break;
+        case "webp":
+          await sharpInstance.webp({
+            quality: 100,
+            // MAXIMUM QUALITY
+            lossless: true,
+            // LOSSLESS CONVERSION
+            smartSubsample: false
+          }).toFile(outputPath);
+          break;
+        case "avif":
+          await sharpInstance.avif({
+            quality: 100,
+            // MAXIMUM QUALITY
+            lossless: true
+            // LOSSLESS CONVERSION
+          }).toFile(outputPath);
+          break;
+        case "tiff":
+          await sharpInstance.tiff({
+            quality: 100,
+            // MAXIMUM QUALITY
+            compression: "none"
+            // NO COMPRESSION
+          }).toFile(outputPath);
+          break;
+        default:
+          throw new Error(`Unsupported output format: ${outputFormat}`);
+      }
+      console.log(`\u2705 RAW conversion completed (100% quality, no compression)`);
+    } catch (error) {
+      console.error(`\u274C RAW conversion failed:`, error);
+      throw new Error(`RAW conversion failed: ${error.message}`);
+    }
+  }
   /**
    * Process RAW files using dcraw.js - industry standard RAW processor
    */
   static async processRawWithDcraw(inputPath, outputPath, outputFormat, options = {}) {
     const { quality = 75, width, height } = options;
     try {
-      if (!dcraw) {
+      const dcrawModule = await loadDcraw();
+      if (!dcrawModule) {
         throw new Error("dcraw not available in this environment");
       }
       console.log(`Processing RAW file with dcraw: ${inputPath} -> ${outputPath}`);
@@ -4541,7 +4638,7 @@ var CompressionEngine = class _CompressionEngine {
           verbose: false
         };
       }
-      const result = dcraw(rawBuffer, dcrawOptions);
+      const result = dcrawModule(rawBuffer, dcrawOptions);
       if (!result || result.length === 0) {
         throw new Error("dcraw processing returned empty result");
       }
@@ -10868,8 +10965,11 @@ async function registerRoutes(app2) {
           console.log(`Processing ${file.originalname} -> ${outputFormat.toUpperCase()} (parallel)`);
           const inputFormat = getFileFormat(file.originalname);
           const fileExtName = file.originalname.split(".").pop()?.toLowerCase() || "";
-          const isRawFile = ["dng", "cr2", "nef", "arw", "orf", "raf", "rw2"].includes(fileExtName);
+          const isRawFile = ["dng", "cr2", "crw", "nef", "arw", "orf", "raf", "rw2"].includes(fileExtName);
           console.log(`File: ${file.originalname}, inputFormat: ${inputFormat}, fileExt: ${fileExtName}, isRawFile: ${isRawFile}`);
+          if (isRawFile) {
+            console.log(`\u{1F3AF} RAW FILE DETECTED: Converting ${file.originalname} with 100% quality (NO COMPRESSION)`);
+          }
           let result;
           if (isRawFile || inputFormat === "svg" || inputFormat === "svg" && outputFormat === "tiff") {
             console.log(`Using professional formats conversion engine for ${file.originalname} -> ${outputFormat}`);
@@ -10940,7 +11040,7 @@ async function registerRoutes(app2) {
           }
           const originalStats = await import_promises.default.stat(file.path);
           const compressedStats = await import_promises.default.stat(outputPath);
-          const compressionRatio = Math.round((1 - compressedStats.size / originalStats.size) * 100);
+          const compressionRatio = originalStats.size > 0 ? Math.round((1 - compressedStats.size / originalStats.size) * 100) : 0;
           const jobUpdate = storage.updateCompressionJob(job.id, {
             status: "completed",
             compressedPath: outputPath,
@@ -11147,7 +11247,7 @@ async function registerRoutes(app2) {
           }
           const originalStats = await import_promises.default.stat(cached.originalPath);
           const compressedStats = await import_promises.default.stat(outputPath);
-          const compressionRatio = Math.round((1 - compressedStats.size / originalStats.size) * 100);
+          const compressionRatio = originalStats.size > 0 ? Math.round((1 - compressedStats.size / originalStats.size) * 100) : 0;
           await storage.updateCompressionJob(job.id, {
             status: "completed",
             compressedPath: outputPath,
@@ -14277,18 +14377,39 @@ async function processSpecialFormatConversion(inputPath, outputPath, inputFormat
   let sharpInstance;
   try {
     if (inputFormat === "raw") {
-      console.log(`Converting RAW file ${inputPath} to ${outputFormat} using dcraw_emu + ImageMagick...`);
+      console.log(`Converting RAW file ${inputPath} to ${outputFormat}...`);
       const inputExists = await import_promises.default.access(inputPath).then(() => true).catch(() => false);
       console.log(`Input file exists: ${inputExists}`);
-      const tempPpmPath = inputPath + "_temp.ppm";
-      const dcrawCommand = `dcraw_emu -w -T "${inputPath}"`;
-      console.log(`Running dcraw_emu command: ${dcrawCommand}`);
-      await execAsync3(dcrawCommand);
-      const baseName = inputPath.replace(/\.[^/.]+$/, "");
-      const tempTiffPath = baseName + ".tiff";
-      console.log(`Expected TIFF output: ${tempTiffPath}`);
-      const tiffExists = await import_promises.default.access(tempTiffPath).then(() => true).catch(() => false);
-      console.log(`TIFF file created: ${tiffExists}`);
+      try {
+        console.log(`Attempting RAW conversion using dcraw_emu + ImageMagick...`);
+        const dcrawCommand = `dcraw_emu -w -T "${inputPath}"`;
+        console.log(`Running dcraw_emu command: ${dcrawCommand}`);
+        await execAsync3(dcrawCommand);
+        const baseName = inputPath.replace(/\.[^/.]+$/, "");
+        const tempTiffPath2 = baseName + ".tiff";
+        console.log(`Expected TIFF output: ${tempTiffPath2}`);
+        const tiffExists = await import_promises.default.access(tempTiffPath2).then(() => true).catch(() => false);
+        if (!tiffExists) {
+          throw new Error("dcraw_emu did not create expected TIFF file");
+        }
+        console.log(`\u2705 dcraw_emu conversion successful, proceeding with ImageMagick...`);
+      } catch (dcrawEmuError) {
+        console.log(`\u26A0\uFE0F dcraw_emu failed: ${dcrawEmuError.message}`);
+        console.log(`\u{1F504} Falling back to Node.js dcraw package...`);
+        try {
+          await compressionEngine_default.processRawConversionOnly(inputPath, outputPath, outputFormat, {
+            width: options.width,
+            height: options.height
+          });
+          console.log(`\u2705 RAW conversion completed (100% quality, no compression)`);
+          return { finalSize: (await import_promises.default.stat(outputPath)).size };
+        } catch (dcrawNodeError) {
+          console.error(`\u274C Both dcraw_emu and Node.js dcraw failed:`);
+          console.error(`dcraw_emu error: ${dcrawEmuError.message}`);
+          console.error(`dcraw package error: ${dcrawNodeError.message}`);
+          throw new Error(`Failed to convert raw to ${outputFormat}: ${dcrawNodeError.message}`);
+        }
+      }
       let convertCommand;
       let resizeParam = "";
       const shouldResizeImage = options.resize === true || options.resize === "true";

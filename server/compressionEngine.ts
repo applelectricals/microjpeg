@@ -70,6 +70,118 @@ export interface AdvancedCompressionOptions {
 export class CompressionEngine {
 
   /**
+   * Process RAW files using dcraw.js - conversion only (no compression)
+   * Maintains 100% quality for conversion without compression
+   */
+  static async processRawConversionOnly(
+    inputPath: string, 
+    outputPath: string, 
+    outputFormat: string,
+    options: { width?: number; height?: number } = {}
+  ): Promise<void> {
+    const { width, height } = options;
+    
+    try {
+      // Load dcraw dynamically
+      const dcrawModule = await loadDcraw();
+      if (!dcrawModule) {
+        throw new Error('dcraw not available in this environment');
+      }
+      
+      console.log(`🎯 RAW Conversion Only (100% quality): ${inputPath} -> ${outputPath}`);
+      
+      // Read the RAW file
+      const rawBuffer = await fs.readFile(inputPath);
+      
+      // Process with dcraw - extract as TIFF for maximum quality (NO COMPRESSION)
+      const dcrawOptions: any = {
+        exportAsTiff: true,
+        use16BitLinearMode: false, // Use 8-bit for compatibility
+        useExportMode: true,
+        noAutoBrightness: false, // Allow auto brightness for better results
+        verbose: false
+      };
+      
+      const result = dcrawModule(rawBuffer, dcrawOptions);
+      
+      if (!result || result.length === 0) {
+        throw new Error('dcraw processing returned empty result');
+      }
+      
+      console.log(`✅ dcraw processed ${rawBuffer.length} bytes -> ${result.length} bytes`);
+      
+      // Now use Sharp to convert the TIFF to the desired output format (100% quality)
+      let sharpInstance = sharp(result);
+      
+      // Apply resizing if specified (maintain aspect ratio)
+      if (width || height) {
+        sharpInstance = sharpInstance.resize(width, height, {
+          fit: 'inside',
+          withoutEnlargement: true
+        });
+      }
+      
+      // Convert to final format with MAXIMUM quality (NO COMPRESSION)
+      switch (outputFormat.toLowerCase()) {
+        case 'jpeg':
+        case 'jpg':
+          await sharpInstance
+            .jpeg({ 
+              quality: 100,  // MAXIMUM QUALITY
+              progressive: false,
+              mozjpeg: false,
+              optimiseCoding: false,
+              trellisQuantisation: false
+            })
+            .toFile(outputPath);
+          break;
+        case 'png':
+          await sharpInstance
+            .png({ 
+              quality: 100,  // MAXIMUM QUALITY  
+              compressionLevel: 0,  // NO COMPRESSION
+              progressive: false 
+            })
+            .toFile(outputPath);
+          break;
+        case 'webp':
+          await sharpInstance
+            .webp({ 
+              quality: 100,  // MAXIMUM QUALITY
+              lossless: true,  // LOSSLESS CONVERSION
+              smartSubsample: false
+            })
+            .toFile(outputPath);
+          break;
+        case 'avif':
+          await sharpInstance
+            .avif({ 
+              quality: 100,  // MAXIMUM QUALITY
+              lossless: true  // LOSSLESS CONVERSION
+            })
+            .toFile(outputPath);
+          break;
+        case 'tiff':
+          await sharpInstance
+            .tiff({ 
+              quality: 100,  // MAXIMUM QUALITY
+              compression: 'none'  // NO COMPRESSION
+            })
+            .toFile(outputPath);
+          break;
+        default:
+          throw new Error(`Unsupported output format: ${outputFormat}`);
+      }
+      
+      console.log(`✅ RAW conversion completed (100% quality, no compression)`);
+      
+    } catch (error) {
+      console.error(`❌ RAW conversion failed:`, error);
+      throw new Error(`RAW conversion failed: ${error.message}`);
+    }
+  }
+
+  /**
    * Process RAW files using dcraw.js - industry standard RAW processor
    */
   static async processRawWithDcraw(
