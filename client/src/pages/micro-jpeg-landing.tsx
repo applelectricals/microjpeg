@@ -28,8 +28,6 @@ import betaUser2 from '@assets/06_1756987891169.webp';
 import betaUser3 from '@assets/07_1756987891169.webp';
 import owlMascot01 from '@assets/owl-mascot-01.webp';
 import owlMascot02 from '@assets/owl-mascot-02.webp';
-// 🎯 Client-Side RAW Processing (Picflow.com approach)
-import { useHybridProcessor } from '@/components/hybrid-processor';
 // Lazy load heavy components for better performance
 const AdSenseAd = lazy(() => import('@/components/AdSenseAd').then(m => ({ default: m.AdSenseAd })));
 const OurProducts = lazy(() => import('@/components/our-products'));
@@ -645,74 +643,51 @@ export default function MicroJPEGLanding() {
     });
   }, []);
 
-  // 🎯 Initialize Hybrid Processor (Client-side RAW + Server-side regular images)
-  const hybridProcessor = useHybridProcessor({
-    onComplete: (results) => {
-      console.log('🎯 Hybrid processing complete:', results);
-      
-      // Convert to session format and merge with existing results
-      const latestSession = sessionManager.getSession();
-      const newSession = {
-        ...latestSession,
-        results: [...latestSession.results, ...results],
-      };
-      
-      setSession(newSession);
-      sessionManager.updateSession(newSession);
-      
-      // Record usage
-      recordCompression(results.length);
-      const conversionCount = results.filter(r => r.wasConverted).length;
-      if (conversionCount > 0) {
-        recordConversion(conversionCount);
+  // Server-side processing for all files (removed client-side WebAssembly approach)
+  const handleServerProcessing = useCallback(async (files: FileWithPreview[]): Promise<CompressionResult[]> => {
+    const results: CompressionResult[] = [];
+    
+    for (const file of files) {
+      try {
+        const formData = new FormData();
+        formData.append('image', file);
+        
+        if (conversionEnabled && selectedFormats.length > 0) {
+          formData.append('outputFormat', selectedFormats[0]);
+        }
+        
+        const response = await fetch('/api/compress', {
+          method: 'POST',
+          body: formData,
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Server error: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        results.push({
+          id: file.id,
+          originalName: file.name,
+          originalSize: file.size,
+          compressedSize: data.compressedSize || file.size,
+          compressionRatio: data.compressionRatio || 1,
+          downloadUrl: data.downloadUrl,
+          originalFormat: file.name.split('.').pop()?.toLowerCase() || 'unknown',
+          wasConverted: data.wasConverted || false
+        });
+        
+      } catch (error) {
+        console.error(`Failed to process ${file.name}:`, error);
+        throw error;
       }
-      
-      setProcessingProgress(100);
-      setProcessingStatus('Processing complete!');
-      setModalState('complete');
-      setIsProcessing(false);
-      setProcessingFileIds(new Set());
-      setNewlyAddedFiles([]);
-      
-      // Show pricing after 3+ files
-      const uniqueFiles = new Set(newSession.results.map(r => r.originalName));
-      if (uniqueFiles.size >= 3 && !showPricing) {
-        setTimeout(() => setShowPricing(true), 1000);
-      }
-    },
-    onProgress: (progress) => {
-      setProcessingProgress(progress.progress);
-      setProcessingStatus(progress.message);
-      
-      if (progress.stage.includes('Client-side RAW')) {
-        setProcessingStatus(`🌐 ${progress.message} (in browser)`);
-      } else if (progress.stage.includes('Server')) {
-        setProcessingStatus(`⚡ ${progress.message}`);
-      }
-    },
-    onError: (error) => {
-      console.error('🎯 Hybrid processing error:', error);
-      toast({
-        title: "Processing failed",
-        description: error,
-        variant: "destructive",
-      });
-      setIsProcessing(false);
-      setProcessingFileIds(new Set());
-      setShowModal(false);
-      setNewlyAddedFiles([]);
-    },
-    outputFormat: conversionEnabled && selectedFormats.length > 0 ? selectedFormats[0] as any : 'jpeg',
-    quality: 90, // High quality for RAW files
-    settings: {
-      quality: 80,
-      outputFormat: conversionEnabled && selectedFormats.length > 0 ? selectedFormats : 'keep-original',
-      resizeOption: 'keep-original',
-      compressionAlgorithm: 'standard',
     }
-  });
+    
+    return results;
+  }, [conversionEnabled, selectedFormats]);
 
-  // Start processing function - moved up to be accessible in useEffect
+  // Start processing function - now using server-side processing only
   const startProcessing = useCallback(async () => {
     // Process only newly added files to avoid reprocessing existing ones
     const filesToProcess = newlyAddedFiles.length > 0 ? newlyAddedFiles : selectedFiles;
@@ -754,26 +729,55 @@ export default function MicroJPEGLanding() {
     setProcessingFileIds(fileIds);
 
     try {
-      // 🎯 Get processing info to show user what will happen
-      const processingInfo = hybridProcessor.getProcessingInfo(filesToProcess);
-      console.log('🎯 Processing Plan:', processingInfo);
+      setProcessingStatus(`Processing ${filesToProcess.length} file${filesToProcess.length !== 1 ? 's' : ''} on server...`);
+      setProcessingProgress(20);
       
-      if (processingInfo.rawFiles > 0) {
-        setProcessingStatus(`Processing ${processingInfo.rawFiles} RAW file${processingInfo.rawFiles > 1 ? 's' : ''} in browser and ${processingInfo.regularFiles} regular file${processingInfo.regularFiles !== 1 ? 's' : ''} on server...`);
-      } else {
-        setProcessingStatus(`Processing ${processingInfo.regularFiles} file${processingInfo.regularFiles !== 1 ? 's' : ''} on server...`);
+      // Use server-side processing for all files
+      const results = await handleServerProcessing(filesToProcess);
+      
+      // Update session with results
+      const latestSession = sessionManager.getSession();
+      const newSession = {
+        ...latestSession,
+        results: [...latestSession.results, ...results],
+      };
+      
+      setSession(newSession);
+      sessionManager.updateSession(newSession);
+      
+      // Record usage
+      recordCompression(results.length);
+      const conversionCount = results.filter(r => r.wasConverted).length;
+      if (conversionCount > 0) {
+        recordConversion(conversionCount);
       }
       
-      // 🚀 Use Hybrid Processor (RAW files client-side, regular files server-side)
-      await hybridProcessor.processFiles(filesToProcess);
+      setProcessingProgress(100);
+      setProcessingStatus('Processing complete!');
+      setModalState('complete');
+      setIsProcessing(false);
+      setProcessingFileIds(new Set());
+      setNewlyAddedFiles([]);
       
-      // Success is handled by hybridProcessor.onComplete callback
+      // Show pricing after 3+ files
+      const uniqueFiles = new Set(newSession.results.map(r => r.originalName));
+      if (uniqueFiles.size >= 3 && !showPricing) {
+        setTimeout(() => setShowPricing(true), 1000);
+      }
 
     } catch (error) {
-      // Error is handled by hybridProcessor.onError callback
-      console.error('🎯 Processing error in startProcessing:', error);
+      console.error('🚨 Processing error:', error);
+      toast({
+        title: "Processing failed",
+        description: error instanceof Error ? error.message : "Unknown error occurred",
+        variant: "destructive",
+      });
+      setIsProcessing(false);
+      setProcessingFileIds(new Set());
+      setShowModal(false);
+      setNewlyAddedFiles([]);
     }
-  }, [selectedFiles, newlyAddedFiles, hybridProcessor]);
+  }, [selectedFiles, newlyAddedFiles, handleServerProcessing, conversionEnabled, selectedFormats]);
 
   // Download all results as comprehensive ZIP
   const downloadAllResults = useCallback(async () => {

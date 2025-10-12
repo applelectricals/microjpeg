@@ -1729,19 +1729,10 @@ var import_express8 = __toESM(require("express"), 1);
 var import_express_session2 = __toESM(require("express-session"), 1);
 var import_cors = __toESM(require("cors"), 1);
 
-// server/routes.ts
-var import_express6 = __toESM(require("express"), 1);
-var import_http = require("http");
-var import_crypto5 = require("crypto");
-var import_multer2 = __toESM(require("multer"), 1);
-var import_sharp4 = __toESM(require("sharp"), 1);
-var import_path4 = __toESM(require("path"), 1);
-var import_compression = __toESM(require("compression"), 1);
-var import_promises = __toESM(require("fs/promises"), 1);
-var import_fs4 = require("fs");
-var import_archiver = __toESM(require("archiver"), 1);
-var import_child_process3 = require("child_process");
-var import_util3 = require("util");
+// server/auth.ts
+var import_bcryptjs = __toESM(require("bcryptjs"), 1);
+var import_express_session = __toESM(require("express-session"), 1);
+var import_connect_pg_simple = __toESM(require("connect-pg-simple"), 1);
 
 // server/storage.ts
 init_schema();
@@ -2063,6 +2054,73 @@ var DatabaseStorage = class {
   }
 };
 var storage = new DatabaseStorage();
+
+// server/auth.ts
+function getSession() {
+  const sessionTtl = 7 * 24 * 60 * 60 * 1e3;
+  const pgStore = (0, import_connect_pg_simple.default)(import_express_session.default);
+  const sessionStore = new pgStore({
+    conString: process.env.DATABASE_URL,
+    createTableIfMissing: true,
+    ttl: sessionTtl,
+    tableName: "sessions"
+  });
+  return (0, import_express_session.default)({
+    secret: process.env.SESSION_SECRET || "your-secret-key-change-in-production",
+    store: sessionStore,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      secure: process.env.SESSION_SECURE_COOKIE === "true",
+      maxAge: sessionTtl
+    }
+  });
+}
+function setupAuth(app2) {
+  app2.set("trust proxy", 1);
+  app2.use(getSession());
+}
+var isAuthenticated = async (req, res, next) => {
+  const session3 = req.session;
+  if (!session3.userId) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  try {
+    const user = await storage.getUser(session3.userId);
+    if (!user) {
+      req.session.destroy(() => {
+      });
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    req.user = user;
+    next();
+  } catch (error) {
+    console.error("Authentication error:", error);
+    res.status(401).json({ message: "Unauthorized" });
+  }
+};
+async function hashPassword(password) {
+  const saltRounds = 12;
+  return import_bcryptjs.default.hash(password, saltRounds);
+}
+async function verifyPassword(password, hashedPassword) {
+  return import_bcryptjs.default.compare(password, hashedPassword);
+}
+
+// server/routes.ts
+var import_express6 = __toESM(require("express"), 1);
+var import_http = require("http");
+var import_crypto5 = require("crypto");
+var import_multer2 = __toESM(require("multer"), 1);
+var import_sharp4 = __toESM(require("sharp"), 1);
+var import_path4 = __toESM(require("path"), 1);
+var import_compression = __toESM(require("compression"), 1);
+var import_promises = __toESM(require("fs/promises"), 1);
+var import_fs4 = require("fs");
+var import_archiver = __toESM(require("archiver"), 1);
+var import_child_process3 = require("child_process");
+var import_util3 = require("util");
 
 // server/emailService.ts
 var import_mail = require("@sendgrid/mail");
@@ -4490,7 +4548,137 @@ var import_fs = require("fs");
 var import_path = __toESM(require("path"), 1);
 var import_child_process = require("child_process");
 var import_util = require("util");
-var import_meta = {};
+
+// server/rawProcessingUtils.ts
+function validateProcessingResult(result2, originalFileSize) {
+  console.log("\u{1F50D} Validating processing result:", result2);
+  if (!result2 || typeof result2 !== "object") {
+    throw new Error("Invalid processing result structure");
+  }
+  const processedSize = Number(
+    result2.processedSize || result2.finalSize || result2.outputSize || result2.compressedSize || 0
+  );
+  const originalSize = Number(originalFileSize) || 0;
+  if (originalSize <= 0) {
+    throw new Error(`Invalid original file size: ${originalSize}`);
+  }
+  if (processedSize <= 0) {
+    throw new Error(`Invalid processed file size: ${processedSize}`);
+  }
+  let compressionRatio = 0;
+  if (originalSize > 0 && processedSize > 0) {
+    compressionRatio = Math.round(
+      (originalSize - processedSize) / originalSize * 100
+    );
+    compressionRatio = Math.max(-500, Math.min(100, compressionRatio));
+  }
+  const validated = {
+    success: Boolean(result2.success !== false),
+    // Default to true if not specified
+    originalSize,
+    processedSize,
+    compressionRatio,
+    qualityAchieved: Number(result2.qualityUsed || result2.quality || 100),
+    processingMethod: result2.method || result2.processingMethod || "dcraw",
+    metadata: result2.metadata || void 0,
+    timing: result2.timing || void 0
+  };
+  const numericFields = ["originalSize", "processedSize", "compressionRatio", "qualityAchieved"];
+  for (const field of numericFields) {
+    const value = validated[field];
+    if (typeof value === "number" && (isNaN(value) || !isFinite(value))) {
+      console.error(`\u274C Invalid ${field}: ${value}`);
+      throw new Error(`Invalid numeric value for ${field}: ${value}`);
+    }
+  }
+  console.log("\u2705 Validation successful:", validated);
+  return validated;
+}
+var RAWProcessingError = class extends Error {
+  constructor(message, code, originalError, suggestedAction) {
+    super(message);
+    this.code = code;
+    this.originalError = originalError;
+    this.suggestedAction = suggestedAction;
+    this.name = "RAWProcessingError";
+  }
+};
+var RAW_ERROR_CODES = {
+  UNSUPPORTED_FORMAT: "RAW_001",
+  CORRUPTED_FILE: "RAW_002",
+  PROCESSING_TIMEOUT: "RAW_003",
+  INSUFFICIENT_MEMORY: "RAW_004",
+  INVALID_PARAMETERS: "RAW_005",
+  NAN_CALCULATION: "RAW_006",
+  FILE_TOO_LARGE: "RAW_007",
+  DCRAW_FAILED: "RAW_008"
+};
+var SafeMath = class {
+  static divide(numerator, denominator, defaultValue = 0) {
+    if (!isFinite(numerator) || !isFinite(denominator) || denominator === 0) {
+      return defaultValue;
+    }
+    const result2 = numerator / denominator;
+    return isFinite(result2) ? result2 : defaultValue;
+  }
+  static multiply(a, b, defaultValue = 0) {
+    if (!isFinite(a) || !isFinite(b)) {
+      return defaultValue;
+    }
+    const result2 = a * b;
+    return isFinite(result2) ? result2 : defaultValue;
+  }
+  static percentage(part, total) {
+    return this.multiply(this.divide(part, total, 0), 100, 0);
+  }
+  static compressionRatio(original, compressed) {
+    if (original <= 0 || compressed < 0) return 0;
+    return Math.round(this.percentage(original - compressed, original));
+  }
+};
+var FileSizeUtils = class {
+  static async getFileSizeWithValidation(filePath) {
+    try {
+      const fs7 = await import("fs/promises");
+      const stats = await fs7.stat(filePath);
+      if (!stats.isFile()) {
+        throw new RAWProcessingError(
+          `Path is not a file: ${filePath}`,
+          RAW_ERROR_CODES.INVALID_PARAMETERS
+        );
+      }
+      const size = stats.size;
+      if (!isFinite(size) || size < 0) {
+        throw new RAWProcessingError(
+          `Invalid file size: ${size}`,
+          RAW_ERROR_CODES.CORRUPTED_FILE
+        );
+      }
+      return size;
+    } catch (error) {
+      if (error instanceof RAWProcessingError) throw error;
+      throw new RAWProcessingError(
+        `Failed to get file size for ${filePath}`,
+        RAW_ERROR_CODES.CORRUPTED_FILE,
+        error,
+        "Verify file exists and is accessible"
+      );
+    }
+  }
+  static formatFileSize(bytes) {
+    if (!isFinite(bytes) || bytes < 0) return "0 B";
+    const units = ["B", "KB", "MB", "GB"];
+    let size = bytes;
+    let unitIndex = 0;
+    while (size >= 1024 && unitIndex < units.length - 1) {
+      size /= 1024;
+      unitIndex++;
+    }
+    return `${size.toFixed(1)} ${units[unitIndex]}`;
+  }
+};
+
+// server/compressionEngine.ts
 import_sharp.default.cache({
   memory: 512,
   // Use only 512MB cache to prevent memory pressure
@@ -4502,130 +4690,153 @@ import_sharp.default.cache({
 import_sharp.default.concurrency(1);
 import_sharp.default.simd(true);
 console.log("\u{1F680} Ultra-Stable Sharp Performance: 512MB cache, 1 CPU core, SIMD enabled");
-var dcraw = null;
-async function loadDcraw() {
-  if (dcraw === null) {
-    try {
-      const { createRequire } = await import("module");
-      const require2 = createRequire(import_meta.url);
-      dcraw = require2("dcraw");
-      console.log("\u2705 dcraw package loaded successfully");
-    } catch (error) {
-      console.log("dcraw not available, RAW processing disabled");
-      dcraw = false;
-    }
-  }
-  return dcraw;
-}
 var execAsync = (0, import_util.promisify)(import_child_process.exec);
 var CompressionEngine = class _CompressionEngine {
   /**
-   * Process RAW files with intelligent compression
-   * RAW files are already compressed - we need to decompress to baseline, then compress intelligently
+   * Industry-Standard RAW Processing with Comprehensive Validation
+   * Based on CloudConvert, ILoveIMG approach with NaN prevention
    */
   static async processRawConversionSmart(inputPath, outputPath, outputFormat, options = {}) {
+    const startTime = Date.now();
     const quality = options.quality || 92;
-    const { width, height, resizePercentage } = options;
     try {
-      console.log(`\u{1F3AF} Smart RAW Conversion: ${inputPath} -> ${outputFormat} at ${quality}% quality`);
-      const rawStats = await import_fs.promises.stat(inputPath);
-      console.log(`\u{1F4CA} RAW file size: ${rawStats.size} bytes (compressed RAW format)`);
-      const baselineTiffPath = `${outputPath}.baseline.tiff`;
+      console.log(`\u{1F3AF} Industry-Standard RAW Processing: ${inputPath} -> ${outputFormat}`);
+      const originalSize = await FileSizeUtils.getFileSizeWithValidation(inputPath);
+      if (originalSize > 500 * 1024 * 1024) {
+        throw new RAWProcessingError(
+          "RAW file exceeds 500MB limit",
+          RAW_ERROR_CODES.FILE_TOO_LARGE,
+          void 0,
+          "Use a smaller RAW file or compress before uploading"
+        );
+      }
+      const baselinePath = `${outputPath}.baseline.tiff`;
       try {
-        const dcrawCommand = `dcraw_emu -w -T "${inputPath}"`;
-        console.log(`\u{1F527} Running dcraw_emu: ${dcrawCommand}`);
+        const dcrawCommand = `dcraw_emu -w -T -6 -q 3 "${inputPath}"`;
+        console.log(`\u{1F527} Running professional dcraw: ${dcrawCommand}`);
         await execAsync(dcrawCommand);
         const baseName = inputPath.replace(/\.[^/.]+$/, "");
         const dcrawOutput = baseName + ".tiff";
         await import_fs.promises.access(dcrawOutput);
-        await import_fs.promises.rename(dcrawOutput, baselineTiffPath);
-        console.log(`\u2705 dcraw_emu successful`);
+        await import_fs.promises.rename(dcrawOutput, baselinePath);
+        console.log(`\u2705 dcraw conversion successful`);
       } catch (dcrawError) {
-        console.log(`\u26A0\uFE0F dcraw_emu failed, trying Node.js dcraw package...`);
-        const dcrawModule = await loadDcraw();
-        if (!dcrawModule) {
-          throw new Error("No RAW processing available - dcraw not found");
-        }
-        const rawBuffer = await import_fs.promises.readFile(inputPath);
-        const result2 = dcrawModule(rawBuffer, {
-          exportAsTiff: true,
-          use16BitLinearMode: false,
-          useExportMode: true,
-          noAutoBrightness: false,
-          verbose: false
-        });
-        if (!result2 || result2.length === 0) {
-          throw new Error("dcraw processing returned empty result");
-        }
-        await import_fs.promises.writeFile(baselineTiffPath, result2);
-        console.log(`\u2705 Node.js dcraw successful`);
+        throw new RAWProcessingError(
+          "dcraw RAW processing failed",
+          RAW_ERROR_CODES.DCRAW_FAILED,
+          dcrawError,
+          "Ensure file is a valid RAW format supported by dcraw"
+        );
       }
-      const baselineStats = await import_fs.promises.stat(baselineTiffPath);
-      const baselineSize = baselineStats.size;
-      console.log(`\u{1F4CA} Baseline uncompressed size: ${baselineSize} bytes`);
-      let processPath = baselineTiffPath;
-      if (resizePercentage && resizePercentage < 100) {
-        const identifyCommand = `identify -ping -format "%wx%h" "${baselineTiffPath}"`;
-        const { stdout } = await execAsync(identifyCommand);
-        const [actualWidth, actualHeight] = stdout.trim().split("x").map(Number);
-        const targetWidth = Math.round(actualWidth * (resizePercentage / 100));
-        const targetHeight = Math.round(actualHeight * (resizePercentage / 100));
-        const resizedPath = `${outputPath}.resized.tiff`;
-        const resizeCommand = `convert "${baselineTiffPath}" -resize "${targetWidth}x${targetHeight}!" "${resizedPath}"`;
-        console.log(`\u{1F527} Resizing: ${actualWidth}x${actualHeight} -> ${targetWidth}x${targetHeight}`);
-        await execAsync(resizeCommand);
-        processPath = resizedPath;
+      const baselineSize = await FileSizeUtils.getFileSizeWithValidation(baselinePath);
+      console.log(`\u{1F4CA} Baseline size: ${FileSizeUtils.formatFileSize(baselineSize)}`);
+      let processPath = baselinePath;
+      if (options.resizePercentage && options.resizePercentage < 100) {
+        processPath = await this.applyResize(baselinePath, outputPath, options.resizePercentage);
       }
-      let convertCommand;
-      let wasCompressed = true;
-      switch (outputFormat.toLowerCase()) {
-        case "jpeg":
-        case "jpg":
-          convertCommand = `convert "${processPath}" -quality ${quality} -sampling-factor 4:2:0 -strip "${outputPath}"`;
-          break;
-        case "png":
-          convertCommand = `convert "${processPath}" -define png:compression-level=8 -strip "${outputPath}"`;
-          wasCompressed = true;
-          break;
-        case "webp":
-          convertCommand = `convert "${processPath}" -quality ${quality} -define webp:method=6 "${outputPath}"`;
-          break;
-        case "avif":
-          convertCommand = `convert "${processPath}" -quality ${quality} "${outputPath}"`;
-          break;
-        case "tiff":
-          convertCommand = `convert "${processPath}" -compress lzw "${outputPath}"`;
-          wasCompressed = true;
-          break;
-        default:
-          throw new Error(`Unsupported output format: ${outputFormat}`);
-      }
-      console.log(`\u{1F527} Converting to ${outputFormat}: ${convertCommand}`);
-      await execAsync(convertCommand);
-      const finalStats = await import_fs.promises.stat(outputPath);
-      const finalSize = finalStats.size;
-      const compressionRatio = Math.round((baselineSize - finalSize) / baselineSize * 100);
-      console.log(`\u{1F4CA} Compression: Baseline ${baselineSize} -> Final ${finalSize} = ${compressionRatio}% reduction`);
-      try {
-        await import_fs.promises.unlink(baselineTiffPath);
-        if (resizePercentage && resizePercentage < 100) {
-          await import_fs.promises.unlink(`${outputPath}.resized.tiff`);
-        }
-      } catch (cleanupError) {
-        console.warn("Cleanup warning:", cleanupError);
-      }
-      console.log(`\u2705 Smart RAW conversion complete: ${outputFormat.toUpperCase()} at ${quality}% quality`);
-      return {
+      await this.convertToFinalFormat(processPath, outputPath, outputFormat, quality);
+      const finalSize = await FileSizeUtils.getFileSizeWithValidation(outputPath);
+      const compressionRatio = SafeMath.compressionRatio(baselineSize, finalSize);
+      await this.cleanupTempFiles([baselinePath, processPath]);
+      const processingTime = Date.now() - startTime;
+      console.log(`\u2705 RAW processing complete in ${processingTime}ms`);
+      const rawResult = {
         success: true,
-        finalSize,
-        qualityUsed: quality,
-        baselineSize,
-        // This is what we should use for compression ratio
-        wasCompressed
+        originalSize,
+        processedSize: finalSize,
+        compressionRatio,
+        qualityAchieved: quality,
+        processingMethod: "dcraw",
+        timing: {
+          processingTime,
+          method: "dcraw+imagemagick"
+        }
       };
+      return validateProcessingResult(rawResult, originalSize);
     } catch (error) {
-      console.error(`\u274C Smart RAW conversion failed:`, error);
-      throw new Error(`RAW conversion failed: ${error.message}`);
+      console.error(`\u274C RAW processing failed:`, error);
+      if (error instanceof RAWProcessingError) {
+        throw error;
+      }
+      throw new RAWProcessingError(
+        `RAW conversion failed: ${error instanceof Error ? error.message : String(error)}`,
+        RAW_ERROR_CODES.CONVERSION_FAILED,
+        error
+      );
+    }
+  }
+  /**
+   * Apply resize using ImageMagick with validation
+   */
+  static async applyResize(inputPath, outputPath, resizePercentage) {
+    try {
+      const identifyCommand = `identify -ping -format "%wx%h" "${inputPath}"`;
+      const { stdout } = await execAsync(identifyCommand);
+      const [width, height] = stdout.trim().split("x").map(Number);
+      if (!Number.isFinite(width) || !Number.isFinite(height)) {
+        throw new RAWProcessingError(
+          "Invalid image dimensions",
+          RAW_ERROR_CODES.CORRUPTED_FILE
+        );
+      }
+      const targetWidth = Math.round(width * (resizePercentage / 100));
+      const targetHeight = Math.round(height * (resizePercentage / 100));
+      const resizedPath = `${outputPath}.resized.tiff`;
+      const resizeCommand = `convert "${inputPath}" -resize "${targetWidth}x${targetHeight}!" "${resizedPath}"`;
+      console.log(`\u{1F527} Resizing: ${width}x${height} -> ${targetWidth}x${targetHeight}`);
+      await execAsync(resizeCommand);
+      return resizedPath;
+    } catch (error) {
+      throw new RAWProcessingError(
+        "Resize operation failed",
+        RAW_ERROR_CODES.CONVERSION_FAILED,
+        error
+      );
+    }
+  }
+  /**
+   * Convert to final format with industry-standard settings
+   */
+  static async convertToFinalFormat(inputPath, outputPath, outputFormat, quality) {
+    let convertCommand;
+    switch (outputFormat.toLowerCase()) {
+      case "jpeg":
+      case "jpg":
+        convertCommand = `convert "${inputPath}" -quality ${quality} -sampling-factor 4:2:0 -strip -colorspace sRGB "${outputPath}"`;
+        break;
+      case "png":
+        convertCommand = `convert "${inputPath}" -define png:compression-level=9 -strip "${outputPath}"`;
+        break;
+      case "webp":
+        convertCommand = `convert "${inputPath}" -quality ${quality} -define webp:method=6 -strip "${outputPath}"`;
+        break;
+      case "avif":
+        convertCommand = `convert "${inputPath}" -quality ${quality} -strip "${outputPath}"`;
+        break;
+      case "tiff":
+        convertCommand = `convert "${inputPath}" -compress lzw -strip "${outputPath}"`;
+        break;
+      default:
+        throw new RAWProcessingError(
+          `Unsupported output format: ${outputFormat}`,
+          RAW_ERROR_CODES.INVALID_PARAMETERS,
+          void 0,
+          "Use JPEG, PNG, WebP, AVIF, or TIFF format"
+        );
+    }
+    console.log(`\u{1F527} Converting to ${outputFormat}: ImageMagick`);
+    await execAsync(convertCommand);
+  }
+  /**
+   * Clean up temporary files safely
+   */
+  static async cleanupTempFiles(paths) {
+    for (const filePath of paths) {
+      try {
+        await import_fs.promises.unlink(filePath);
+      } catch (error) {
+        console.warn(`Cleanup warning for ${filePath}:`, error);
+      }
     }
   }
   /**
@@ -4714,7 +4925,8 @@ var CompressionEngine = class _CompressionEngine {
       console.log(`Successfully processed RAW file to ${outputFormat.toUpperCase()}`);
     } catch (error) {
       console.error(`dcraw processing failed:`, error);
-      throw new Error(`RAW processing failed: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`RAW processing failed: ${errorMessage}`);
     }
   }
   /**
@@ -4729,7 +4941,8 @@ var CompressionEngine = class _CompressionEngine {
       const metadata = dcraw(rawBuffer, { verbose: true, identify: true });
       return metadata && metadata.length > 0 && !metadata.includes("not a raw file");
     } catch (error) {
-      console.error(`dcraw identify failed: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`dcraw identify failed: ${errorMessage}`);
       return false;
     }
   }
@@ -4777,7 +4990,8 @@ var CompressionEngine = class _CompressionEngine {
         console.warn("ImageMagick stderr:", stderr);
       }
     } catch (error) {
-      throw new Error(`ImageMagick processing failed: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`ImageMagick processing failed: ${errorMessage}`);
     }
   }
   /**
@@ -4791,7 +5005,8 @@ var CompressionEngine = class _CompressionEngine {
       console.log(`ImageMagick identify stderr: ${stderr}`);
       return stdout.length > 0 && !stdout.includes("no decode delegate");
     } catch (error) {
-      console.error(`ImageMagick identify failed: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`ImageMagick identify failed: ${errorMessage}`);
       return false;
     }
   }
@@ -4966,12 +5181,11 @@ var CompressionEngine = class _CompressionEngine {
         const outputStats = await import_fs.promises.stat(outputPath);
         return {
           finalSize: outputStats.size,
-          qualityUsed: adjustedQuality,
-          baselineSize: tempStats.size
-          // Use uncompressed TIFF size as baseline for ratio calculation
+          qualityUsed: adjustedQuality
         };
       } catch (error) {
-        throw new Error(`Failed to process RAW ${inputExtension?.toUpperCase()} file: ${error.message}`);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        throw new Error(`Failed to process RAW ${inputExtension?.toUpperCase()} file: ${errorMessage}`);
       }
     }
     let sharpInstance;
@@ -4988,7 +5202,8 @@ var CompressionEngine = class _CompressionEngine {
       });
       sharpInstance = sharpInstance.timeout({ seconds: 30 });
     } catch (error) {
-      throw new Error(`Failed to process ${inputExtension?.toUpperCase()} file: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to process ${inputExtension?.toUpperCase()} file: ${errorMessage}`);
     }
     const resizeKernel = this.getResizeKernel(resizeQuality);
     if (resizeKernel) {
@@ -4998,7 +5213,8 @@ var CompressionEngine = class _CompressionEngine {
       try {
         sharpInstance = sharpInstance.rotate();
       } catch (error) {
-        console.warn("Web optimization rotate failed, continuing without it:", error.message);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.warn("Web optimization rotate failed, continuing without it:", errorMessage);
       }
     }
     switch (outputFormat) {
@@ -6660,7 +6876,7 @@ init_DualUsageTracker();
 init_operationLimits();
 
 // server/superuser.ts
-var import_bcryptjs = __toESM(require("bcryptjs"), 1);
+var import_bcryptjs2 = __toESM(require("bcryptjs"), 1);
 var import_drizzle_orm3 = require("drizzle-orm");
 init_db();
 init_schema();
@@ -6800,91 +7016,6 @@ function setSuperuserBypass(req, enabled, reason) {
     delete session3.superBypassReason;
   }
 }
-
-// server/rawProcessingUtils.ts
-var RAWProcessingError = class extends Error {
-  constructor(message, code, originalError, suggestedAction) {
-    super(message);
-    this.code = code;
-    this.originalError = originalError;
-    this.suggestedAction = suggestedAction;
-    this.name = "RAWProcessingError";
-  }
-};
-var RAW_ERROR_CODES = {
-  UNSUPPORTED_FORMAT: "RAW_001",
-  CORRUPTED_FILE: "RAW_002",
-  PROCESSING_TIMEOUT: "RAW_003",
-  INSUFFICIENT_MEMORY: "RAW_004",
-  INVALID_PARAMETERS: "RAW_005",
-  NAN_CALCULATION: "RAW_006",
-  FILE_TOO_LARGE: "RAW_007",
-  DCRAW_FAILED: "RAW_008"
-};
-var SafeMath = class {
-  static divide(numerator, denominator, defaultValue = 0) {
-    if (!isFinite(numerator) || !isFinite(denominator) || denominator === 0) {
-      return defaultValue;
-    }
-    const result2 = numerator / denominator;
-    return isFinite(result2) ? result2 : defaultValue;
-  }
-  static multiply(a, b, defaultValue = 0) {
-    if (!isFinite(a) || !isFinite(b)) {
-      return defaultValue;
-    }
-    const result2 = a * b;
-    return isFinite(result2) ? result2 : defaultValue;
-  }
-  static percentage(part, total) {
-    return this.multiply(this.divide(part, total, 0), 100, 0);
-  }
-  static compressionRatio(original, compressed) {
-    if (original <= 0 || compressed < 0) return 0;
-    return Math.round(this.percentage(original - compressed, original));
-  }
-};
-var FileSizeUtils = class {
-  static async getFileSizeWithValidation(filePath) {
-    try {
-      const fs7 = await import("fs/promises");
-      const stats = await fs7.stat(filePath);
-      if (!stats.isFile()) {
-        throw new RAWProcessingError(
-          `Path is not a file: ${filePath}`,
-          RAW_ERROR_CODES.INVALID_PARAMETERS
-        );
-      }
-      const size = stats.size;
-      if (!isFinite(size) || size < 0) {
-        throw new RAWProcessingError(
-          `Invalid file size: ${size}`,
-          RAW_ERROR_CODES.CORRUPTED_FILE
-        );
-      }
-      return size;
-    } catch (error) {
-      if (error instanceof RAWProcessingError) throw error;
-      throw new RAWProcessingError(
-        `Failed to get file size for ${filePath}`,
-        RAW_ERROR_CODES.CORRUPTED_FILE,
-        error,
-        "Verify file exists and is accessible"
-      );
-    }
-  }
-  static formatFileSize(bytes) {
-    if (!isFinite(bytes) || bytes < 0) return "0 B";
-    const units = ["B", "KB", "MB", "GB"];
-    let size = bytes;
-    let unitIndex = 0;
-    while (size >= 1024 && unitIndex < units.length - 1) {
-      size /= 1024;
-      unitIndex++;
-    }
-    return `${size.toFixed(1)} ${units[unitIndex]}`;
-  }
-};
 
 // server/routes.ts
 init_schema();
@@ -7504,62 +7635,6 @@ var apiTierAccessControl = async (req, res, next) => {
     next();
   }
 };
-
-// server/auth.ts
-var import_bcryptjs2 = __toESM(require("bcryptjs"), 1);
-var import_express_session = __toESM(require("express-session"), 1);
-var import_connect_pg_simple = __toESM(require("connect-pg-simple"), 1);
-function getSession() {
-  const sessionTtl = 7 * 24 * 60 * 60 * 1e3;
-  const pgStore = (0, import_connect_pg_simple.default)(import_express_session.default);
-  const sessionStore = new pgStore({
-    conString: process.env.DATABASE_URL,
-    createTableIfMissing: true,
-    ttl: sessionTtl,
-    tableName: "sessions"
-  });
-  return (0, import_express_session.default)({
-    secret: process.env.SESSION_SECRET || "your-secret-key-change-in-production",
-    store: sessionStore,
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      httpOnly: true,
-      secure: process.env.SESSION_SECURE_COOKIE === "true",
-      maxAge: sessionTtl
-    }
-  });
-}
-function setupAuth(app2) {
-  app2.set("trust proxy", 1);
-  app2.use(getSession());
-}
-var isAuthenticated = async (req, res, next) => {
-  const session3 = req.session;
-  if (!session3.userId) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-  try {
-    const user = await storage.getUser(session3.userId);
-    if (!user) {
-      req.session.destroy(() => {
-      });
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-    req.user = user;
-    next();
-  } catch (error) {
-    console.error("Authentication error:", error);
-    res.status(401).json({ message: "Unauthorized" });
-  }
-};
-async function hashPassword(password) {
-  const saltRounds = 12;
-  return import_bcryptjs2.default.hash(password, saltRounds);
-}
-async function verifyPassword(password, hashedPassword) {
-  return import_bcryptjs2.default.compare(password, hashedPassword);
-}
 
 // server/payment.ts
 init_db();
@@ -10289,7 +10364,6 @@ async function processCompressionJob(jobId2, originalPath, originalFilename, set
     await storage.updateCompressionJob(jobId2, {
       status: "completed",
       compressedSize: result2.finalSize,
-      compressionRatio,
       compressedPath: outputPath,
       qualityLevel: quality.toString(),
       outputFormat,
@@ -10299,7 +10373,7 @@ async function processCompressionJob(jobId2, originalPath, originalFilename, set
       completedAt: /* @__PURE__ */ new Date()
     });
     try {
-      const dualTracker = new DualUsageTracker(userId2, sessionId, userType);
+      const dualTracker = new DualUsageTracker(userId2, sessionId || void 0, userType);
       await dualTracker.recordOperation(originalFilename, originalStats.size, pageIdentifier);
       console.log(`\u2705 DualUsageTracker recorded operation: ${originalFilename} (${originalStats.size} bytes) on ${pageIdentifier}`);
     } catch (recordError) {
@@ -10308,9 +10382,10 @@ async function processCompressionJob(jobId2, originalPath, originalFilename, set
     console.log(`Successfully processed job ${jobId2}: ${originalStats.size} \u2192 ${result2.finalSize} bytes (${compressionRatio}% reduction)`);
   } catch (error) {
     console.error(`Failed to process job ${jobId2}:`, error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     await storage.updateCompressionJob(jobId2, {
       status: "failed",
-      errorMessage: `Processing failed: ${error.message}`
+      errorMessage: `Processing failed: ${errorMessage}`
     });
   }
 }
@@ -10461,10 +10536,11 @@ async function registerRoutes(app2) {
         });
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       res.status(503).json({
         status: "error",
         message: "R2 service not available",
-        error: error.message
+        error: errorMessage
       });
     }
   });
@@ -10479,7 +10555,7 @@ async function registerRoutes(app2) {
     try {
       const { jobId: jobId2 } = req.params;
       const { getJobStatus: getJobStatus2 } = await Promise.resolve().then(() => (init_queueService(), queueService_exports));
-      const jobStatus = await getJobStatus2(jobId2);
+      const jobStatus = await getJobStatus2();
       if (!jobStatus) {
         return res.status(404).json({
           error: "Job not found",
@@ -10507,10 +10583,10 @@ async function registerRoutes(app2) {
           error: "Missing required fields: jobType, jobData"
         });
       }
-      const job = await addJobToQueue2(jobType, jobData, "standard", options);
+      const job = await addJobToQueue2();
       res.json({
         success: true,
-        jobId: job.id,
+        jobId: job?.id || "disabled",
         message: `Job added to queue successfully`
       });
     } catch (error) {
@@ -10707,6 +10783,7 @@ async function registerRoutes(app2) {
           const originalPath = file.path;
           const originalFormat2 = file.originalname.split(".").pop()?.toLowerCase() || "unknown";
           const job = await storage.createCompressionJob({
+            id: `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             userId: userId2,
             sessionId,
             originalFilename: file.originalname,
@@ -10785,7 +10862,7 @@ async function registerRoutes(app2) {
             status: "processing",
             compressionSettings: settings
           });
-          await processCompressionJob(job.id, job.originalPath, job.originalFilename, settings, userId2, sessionId, userType, pageIdentifier);
+          await processCompressionJob(job.id, job.originalPath, job.originalFilename, settings, userId2, sessionId || "", userType, pageIdentifier);
           const updatedJob = await storage.getCompressionJob(job.id);
           results.push({
             id: job.id,
@@ -10794,9 +10871,10 @@ async function registerRoutes(app2) {
           });
         } catch (error) {
           console.error(`Failed to start processing job ${job.id}:`, error);
+          const errorMessage = error instanceof Error ? error.message : String(error);
           await storage.updateCompressionJob(job.id, {
             status: "failed",
-            errorMessage: `Processing failed: ${error.message}`
+            errorMessage: `Processing failed: ${errorMessage}`
           });
         }
       }
@@ -10827,14 +10905,15 @@ async function registerRoutes(app2) {
       if (!user && req.session && req.session.userId) {
         console.log("Using session userId as fallback:", req.session.userId);
         try {
-          user = await storage.getUser(req.session.userId);
+          const fetchedUser = await storage.getUser(req.session.userId);
+          user = fetchedUser || null;
           console.log("Fetched user data from session fallback:", {
             id: user?.id,
-            isPremium: user?.isPremium,
-            subscriptionStatus: user?.subscriptionStatus
+            subscriptionTier: user?.subscriptionTier
           });
         } catch (error) {
-          console.log("Error fetching user from session fallback:", error.message);
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.log("Error fetching user from session fallback:", errorMessage);
         }
       }
       if (user && user.id) {
@@ -10887,8 +10966,8 @@ async function registerRoutes(app2) {
         });
       }
       if (pageLimits.requiresPayment && user) {
-        const hasActiveSubscription = user.isPremium && user.subscriptionStatus === "active";
-        const hasValidTestPremium = user.testPremiumExpiresAt && new Date(user.testPremiumExpiresAt) > /* @__PURE__ */ new Date();
+        const hasActiveSubscription = user.subscriptionTier === "premium";
+        const hasValidTestPremium = false;
         if (pageIdentifier === "test-1-dollar" && !hasValidTestPremium) {
           return res.status(402).json({
             error: "Payment required",
@@ -11011,6 +11090,7 @@ async function registerRoutes(app2) {
         for (const outputFormat of outputFormats) {
           console.log(`Preparing compression job for user ${user?.id}, file: ${file.originalname}, format: ${outputFormat}`);
           const jobPromise = storage.createCompressionJob({
+            id: `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             userId: user?.id || null,
             sessionId: req.sessionID,
             originalFilename: file.originalname,
@@ -11075,7 +11155,8 @@ async function registerRoutes(app2) {
           if (isRawFile) {
             console.log(`\u{1F3AF} RAW FILE DETECTED: Converting ${file.originalname} with intelligent compression`);
             try {
-              result = await compressionEngine_default.processRawConversionSmart(
+              const shouldResize = settings.resizePercentage && settings.resizePercentage < 100;
+              const result2 = await compressionEngine_default.processRawConversionSmart(
                 file.path,
                 outputPath,
                 outputFormat,
@@ -11085,11 +11166,11 @@ async function registerRoutes(app2) {
                   resizePercentage: shouldResize ? settings.resizePercentage : void 0
                 }
               );
-              console.log(`RAW conversion result:`, result);
-              const originalSize = result.baselineSize;
-              const compressedSize = result.finalSize;
-              const compressionRatio2 = originalSize > 0 ? Math.round((originalSize - compressedSize) / originalSize * 100) : 0;
-              console.log(`\u{1F4CA} RAW Stats: Baseline ${originalSize} -> Final ${compressedSize} = ${compressionRatio2}% reduction`);
+              console.log(`RAW conversion result:`, result2);
+              const originalSize = result2.originalSize;
+              const compressedSize = result2.processedSize;
+              const compressionRatio2 = result2.compressionRatio;
+              console.log(`\u{1F4CA} RAW Stats: Original ${originalSize} -> Final ${compressedSize} = ${compressionRatio2}% reduction`);
               let thumbnailPath;
               try {
                 thumbnailPath = await generateThumbnailFromRaw(outputPath, import_path4.default.dirname(outputPath), jobId);
@@ -11103,15 +11184,15 @@ async function registerRoutes(app2) {
               results.push({
                 id: jobId,
                 originalName: file.originalname,
-                originalSize: result.baselineSize,
+                originalSize: result2.baselineSize,
                 // Use baseline size for display
-                compressedSize: result.finalSize,
+                compressedSize: result2.finalSize,
                 compressionRatio: compressionRatio2,
                 downloadUrl: `/api/download/${jobId}`,
                 originalFormat: originalFormat.toUpperCase(),
                 outputFormat: outputFormat.toUpperCase(),
                 wasConverted: true,
-                wasCompressed: result.wasCompressed,
+                wasCompressed: result2.wasCompressed,
                 ...previewUrl && { previewUrl }
               });
               console.log(`\u2705 RAW conversion complete for ${file.originalname}`);
@@ -12549,13 +12630,13 @@ async function registerRoutes(app2) {
         if (paymentIntent.metadata.packageId) {
           try {
             console.log(`Processing credit purchase payment: ${paymentIntent.id}`);
-            const { creditPurchases: creditPurchases2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+            const { creditPurchases } = await Promise.resolve().then(() => (init_schema(), schema_exports));
             const { db: db2 } = await Promise.resolve().then(() => (init_db(), db_exports));
             const { eq: eq11 } = await import("drizzle-orm");
-            await db2.update(creditPurchases2).set({
+            await db2.update(creditPurchases).set({
               status: "completed",
               completedAt: /* @__PURE__ */ new Date()
-            }).where(eq11(creditPurchases2.stripePaymentIntentId, paymentIntent.id));
+            }).where(eq11(creditPurchases.stripePaymentIntentId, paymentIntent.id));
             const userId2 = paymentIntent.metadata.userId;
             if (userId2 && userId2 !== "guest") {
               const credits = parseInt(paymentIntent.metadata.credits);
@@ -12662,13 +12743,13 @@ async function registerRoutes(app2) {
                 amount
               );
               console.log(`Credit purchase failure notification sent to ${user.email}`);
-              const { creditPurchases: creditPurchases2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+              const { creditPurchases } = await Promise.resolve().then(() => (init_schema(), schema_exports));
               const { db: db2 } = await Promise.resolve().then(() => (init_db(), db_exports));
               const { eq: eq11 } = await import("drizzle-orm");
-              await db2.update(creditPurchases2).set({
+              await db2.update(creditPurchases).set({
                 status: "failed",
                 completedAt: /* @__PURE__ */ new Date()
-              }).where(eq11(creditPurchases2.stripePaymentIntentId, paymentIntent.id));
+              }).where(eq11(creditPurchases.stripePaymentIntentId, paymentIntent.id));
             }
           } catch (error) {
             console.error("Failed to process credit purchase payment failure:", error);
@@ -13962,12 +14043,12 @@ async function registerRoutes(app2) {
         return res.status(400).json({ error: "Output format is required" });
       }
       const qualityValue = quality ? parseInt(quality, 10) : 85;
-      const shouldResize2 = resize === "true";
+      const shouldResize = resize === "true";
       const resizePercentageValue = resizePercentage ? parseInt(resizePercentage, 10) : 100;
-      const customWidth = !shouldResize2 || resizePercentageValue === 100 ? width ? parseInt(width, 10) : 2560 : 0;
-      const customHeight = !shouldResize2 || resizePercentageValue === 100 ? height ? parseInt(height, 10) : 2560 : 0;
+      const customWidth = !shouldResize || resizePercentageValue === 100 ? width ? parseInt(width, 10) : 2560 : 0;
+      const customHeight = !shouldResize || resizePercentageValue === 100 ? height ? parseInt(height, 10) : 2560 : 0;
       const maintainAspectRatio = maintainAspect !== "false";
-      console.log(`\u{1F527} CR2 RESIZE DEBUG: resize=${resize}, shouldResize=${shouldResize2}, resizePercentage=${resizePercentageValue}, width=${customWidth}, height=${customWidth}`);
+      console.log(`\u{1F527} CR2 RESIZE DEBUG: resize=${resize}, shouldResize=${shouldResize}, resizePercentage=${resizePercentageValue}, width=${customWidth}, height=${customWidth}`);
       console.log(`\u{1F527} CR2 RAW BODY:`, JSON.stringify(req.body, null, 2));
       const isUserAuthenticated = req.isAuthenticated && req.isAuthenticated();
       const user = isUserAuthenticated ? req.user : null;
@@ -14027,7 +14108,7 @@ async function registerRoutes(app2) {
           console.log(`Original file size: ${originalStats.size} bytes`);
           console.log(`\u{1F527} CALLING processSpecialFormatConversion with:`, {
             quality: qualityValue,
-            resize: shouldResize2,
+            resize: shouldResize,
             width: customWidth,
             height: customHeight,
             maintainAspect: maintainAspectRatio,
@@ -14040,7 +14121,7 @@ async function registerRoutes(app2) {
             outputFormat,
             {
               quality: qualityValue,
-              resize: shouldResize2,
+              resize: shouldResize,
               width: customWidth,
               height: customHeight,
               maintainAspect: maintainAspectRatio,
@@ -14575,7 +14656,7 @@ async function processSpecialFormatConversion(inputPath, outputPath, inputFormat
             }
           );
           console.log(`\u2705 Smart RAW conversion completed`);
-          return { success: true, outputSize: smartResult.finalSize };
+          return { success: true, outputSize: smartResult.processedSize };
         } catch (smartError) {
           console.error(`\u274C Smart RAW conversion failed: ${smartError instanceof Error ? smartError.message : String(smartError)}`);
           throw new Error(`Failed to convert raw to ${outputFormat}: ${smartError instanceof Error ? smartError.message : String(smartError)}`);
