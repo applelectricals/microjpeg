@@ -28,6 +28,8 @@ import betaUser2 from '@assets/06_1756987891169.webp';
 import betaUser3 from '@assets/07_1756987891169.webp';
 import owlMascot01 from '@assets/owl-mascot-01.webp';
 import owlMascot02 from '@assets/owl-mascot-02.webp';
+// 🎯 Client-Side RAW Processing (Picflow.com approach)
+import { useHybridProcessor } from '@/components/hybrid-processor';
 // Lazy load heavy components for better performance
 const AdSenseAd = lazy(() => import('@/components/AdSenseAd').then(m => ({ default: m.AdSenseAd })));
 const OurProducts = lazy(() => import('@/components/our-products'));
@@ -643,6 +645,73 @@ export default function MicroJPEGLanding() {
     });
   }, []);
 
+  // 🎯 Initialize Hybrid Processor (Client-side RAW + Server-side regular images)
+  const hybridProcessor = useHybridProcessor({
+    onComplete: (results) => {
+      console.log('🎯 Hybrid processing complete:', results);
+      
+      // Convert to session format and merge with existing results
+      const latestSession = sessionManager.getSession();
+      const newSession = {
+        ...latestSession,
+        results: [...latestSession.results, ...results],
+      };
+      
+      setSession(newSession);
+      sessionManager.updateSession(newSession);
+      
+      // Record usage
+      recordCompression(results.length);
+      const conversionCount = results.filter(r => r.wasConverted).length;
+      if (conversionCount > 0) {
+        recordConversion(conversionCount);
+      }
+      
+      setProcessingProgress(100);
+      setProcessingStatus('Processing complete!');
+      setModalState('complete');
+      setIsProcessing(false);
+      setProcessingFileIds(new Set());
+      setNewlyAddedFiles([]);
+      
+      // Show pricing after 3+ files
+      const uniqueFiles = new Set(newSession.results.map(r => r.originalName));
+      if (uniqueFiles.size >= 3 && !showPricing) {
+        setTimeout(() => setShowPricing(true), 1000);
+      }
+    },
+    onProgress: (progress) => {
+      setProcessingProgress(progress.progress);
+      setProcessingStatus(progress.message);
+      
+      if (progress.stage.includes('Client-side RAW')) {
+        setProcessingStatus(`🌐 ${progress.message} (in browser)`);
+      } else if (progress.stage.includes('Server')) {
+        setProcessingStatus(`⚡ ${progress.message}`);
+      }
+    },
+    onError: (error) => {
+      console.error('🎯 Hybrid processing error:', error);
+      toast({
+        title: "Processing failed",
+        description: error,
+        variant: "destructive",
+      });
+      setIsProcessing(false);
+      setProcessingFileIds(new Set());
+      setShowModal(false);
+      setNewlyAddedFiles([]);
+    },
+    outputFormat: conversionEnabled && selectedFormats.length > 0 ? selectedFormats[0] as any : 'jpeg',
+    quality: 90, // High quality for RAW files
+    settings: {
+      quality: 80,
+      outputFormat: conversionEnabled && selectedFormats.length > 0 ? selectedFormats : 'keep-original',
+      resizeOption: 'keep-original',
+      compressionAlgorithm: 'standard',
+    }
+  });
+
   // Start processing function - moved up to be accessible in useEffect
   const startProcessing = useCallback(async () => {
     // Process only newly added files to avoid reprocessing existing ones
@@ -684,146 +753,27 @@ export default function MicroJPEGLanding() {
     const fileIds = new Set(filesToProcess.map(f => f.id));
     setProcessingFileIds(fileIds);
 
-    let progressInterval: NodeJS.Timeout | undefined;
-    
     try {
-      // Prepare FormData for the real API
-      const formData = new FormData();
+      // 🎯 Get processing info to show user what will happen
+      const processingInfo = hybridProcessor.getProcessingInfo(filesToProcess);
+      console.log('🎯 Processing Plan:', processingInfo);
       
-      // Add files to process to FormData
-      filesToProcess.forEach((file) => {
-        formData.append('files', file as File);
-      });
-
-      // Prepare compression settings
-      const settings = {
-        quality: 80, // Balanced quality for good compression ratios
-        outputFormat: conversionEnabled && selectedFormats.length > 0 ? selectedFormats : 'keep-original',
-        resizeOption: 'keep-original',
-        compressionAlgorithm: 'standard',
-      };
-
-      // Add settings to FormData
-      formData.append('settings', JSON.stringify(settings));
-
-      // Estimate processing duration based on file count and sizes
-      const totalSize = filesToProcess.reduce((sum, file) => sum + file.size, 0);
-      const estimatedDuration = Math.max(1000, Math.min(5000, filesToProcess.length * 800 + totalSize / 1024 / 1024 * 100));
-      
-      setProcessingProgress(15);
-      setProcessingStatus('Compressing images...');
-      
-      // Start progress simulation
-      let currentProgress = 15;
-      progressInterval = setInterval(() => {
-        const increment = Math.random() * 8 + 2; // 2-10% increments
-        currentProgress = Math.min(currentProgress + increment, 85); // Cap at 85% until completion
-        setProcessingProgress(Math.floor(currentProgress));
-      }, Math.max(estimatedDuration / 20, 200)); // Update every 200ms minimum
-
-      const response = await fetch('/api/compress', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (processingInfo.rawFiles > 0) {
+        setProcessingStatus(`Processing ${processingInfo.rawFiles} RAW file${processingInfo.rawFiles > 1 ? 's' : ''} in browser and ${processingInfo.regularFiles} regular file${processingInfo.regularFiles !== 1 ? 's' : ''} on server...`);
+      } else {
+        setProcessingStatus(`Processing ${processingInfo.regularFiles} file${processingInfo.regularFiles !== 1 ? 's' : ''} on server...`);
       }
-
-      const data = await response.json();
       
-      // Clear progress interval and set to completion
-      clearInterval(progressInterval);
-      setProcessingProgress(100);
-
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
-      // Record usage in local sessionStorage for free tier tracking
-      if (data.results && data.results.length > 0) {
-        // Each completed file operation counts as 1 operation
-        // data.results.length represents the number of files processed
-        const operationCount = data.results.length;
-        
-        // Record operations in local storage
-        recordCompression(operationCount);
-        
-        // Also record conversions for RAW files and format changes
-        const conversionCount = data.results.filter((result: CompressionResult) => 
-          result.wasConverted || (result.originalFormat && result.outputFormat && isConversionRequest(result.originalFormat, result.outputFormat))
-        ).length;
-        
-        if (conversionCount > 0) {
-          recordConversion(conversionCount);
-        }
-        
-        // Usage recording is handled server-side by DualUsageTracker
-        // No additional frontend recording needed
-        
-        // Usage stats are now automatically refreshed by header counter
-        
-        console.log(`Recorded ${operationCount} operations for ${data.results.length} files processed`);
-      }
-
-      // Get the latest session data to ensure we don't lose any previous results
-      const latestSession = sessionManager.getSession();
+      // 🚀 Use Hybrid Processor (RAW files client-side, regular files server-side)
+      await hybridProcessor.processFiles(filesToProcess);
       
-      console.log('startProcessing - Before updating session - existing results:', latestSession.results.length);
-      console.log('startProcessing - New results to add:', data.results?.length || 0);
-      
-      // Update session with results (accumulate with existing results)
-      const newSession: SessionData = {
-        ...latestSession,
-        results: [...latestSession.results, ...(data.results || [])],
-        batchDownloadUrl: data.batchDownloadUrl,
-      };
-      
-      console.log('startProcessing - After merging - total results:', newSession.results.length);
-
-      setSession(newSession);
-      sessionManager.updateSession(newSession);
-
-      // Usage stats are now automatically refreshed by header counter
-      setProcessingProgress(100);
-      setProcessingStatus('MicroJPEG just saved you space!');
-      setModalState('complete');
-      setIsProcessing(false);
-      setProcessingFileIds(new Set()); // Clear processing state
-      
-      // Don't clear selected files - keep them for thumbnails and format conversions
-      // Clear newly added files to prevent reprocessing
-      setNewlyAddedFiles([]);
-
-      // Show pricing cards after 3 or more files have been processed
-      const uniqueFiles = new Set(newSession.results.map(r => r.originalName));
-      if (uniqueFiles.size >= 3 && !showPricing) {
-        setTimeout(() => {
-          setShowPricing(true);
-        }, 1000); // Show pricing modal 1 second after processing completes
-      }
+      // Success is handled by hybridProcessor.onComplete callback
 
     } catch (error) {
-      console.error('Compression error:', error);
-      // Clear progress interval on error
-      if (progressInterval) {
-        clearInterval(progressInterval);
-      }
-      toast({
-        title: "Compression failed",
-        description: error instanceof Error ? error.message : "An error occurred during compression",
-        variant: "destructive",
-      });
-      setIsProcessing(false);
-      setProcessingFileIds(new Set()); // Clear processing state on error
-      setCurrentlyProcessingFormat(null); // Clear currently processing format
-      setShowModal(false);
-      
-      // Don't clear selected files - keep them for thumbnails and format conversions
-      // Clear newly added files to prevent reprocessing
-      setNewlyAddedFiles([]);
+      // Error is handled by hybridProcessor.onError callback
+      console.error('🎯 Processing error in startProcessing:', error);
     }
-  }, [selectedFiles, user, session, selectedFormats, conversionEnabled, toast]);
+  }, [selectedFiles, newlyAddedFiles, hybridProcessor]);
 
   // Download all results as comprehensive ZIP
   const downloadAllResults = useCallback(async () => {
