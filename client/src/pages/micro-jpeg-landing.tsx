@@ -1976,14 +1976,41 @@ export default function MicroJPEGLanding() {
                             <div className="flex items-center gap-3 flex-wrap flex-1 justify-end">
                               {group.results.map((result) => {
                                 const formatInfo = getFormatInfo((result.outputFormat || 'unknown').toLowerCase());
+                                
+                                // Special handling for RAW conversions
+                                const isRawConversion = ['CR2', 'NEF', 'ARW', 'DNG', 'ORF', 'RAF', 'RW2'].includes(
+                                  result.originalFormat?.toUpperCase() || ''
+                                );
+                                
                                 return (
                                   <div key={result.id} className="flex items-center gap-2">
                                     {/* Compression percentage */}
                                     <div className="text-right">
                                       <div className="text-lg font-bold text-gray-700">
-                                        {result.compressedSize > result.originalSize ? '+' : '-'}{Math.abs(result.compressionRatio)}%
+                                        {(() => {
+                                          // Ensure we have valid numbers
+                                          const origSize = result.originalSize || 0;
+                                          const compSize = result.compressedSize || 0;
+                                          
+                                          if (origSize === 0 || compSize === 0) {
+                                            return 'N/A';
+                                          }
+                                          
+                                          const ratio = Math.round(((origSize - compSize) / origSize) * 100);
+                                          
+                                          // For RAW, show positive reduction even if output is larger than RAW input
+                                          // (because we're comparing to uncompressed baseline)
+                                          if (isRawConversion && ratio < 0) {
+                                            return `${Math.abs(ratio)}% compressed`;
+                                          }
+                                          
+                                          return (compSize > origSize ? '+' : '-') + Math.abs(ratio) + '%';
+                                        })()}
                                       </div>
-                                      <div className="text-sm text-gray-500">{formatFileSize(result.compressedSize)}</div>
+                                      <div className="text-sm text-gray-500">
+                                        {formatFileSize(result.compressedSize || 0)}
+                                        {isRawConversion && <span className="text-xs"> (from RAW)</span>}
+                                      </div>
                                     </div>
                                     
                                     {/* Format icon/button */}

@@ -72,161 +72,175 @@ export interface AdvancedCompressionOptions {
 export class CompressionEngine {
 
   /**
-   * Process RAW files using dcraw.js - conversion only (no compression)
-   * Maintains 100% quality for conversion without compression
+   * Process RAW files with intelligent compression
+   * RAW files are already compressed - we need to decompress to baseline, then compress intelligently
    */
-  static async processRawConversionOnly(
+  static async processRawConversionSmart(
     inputPath: string, 
     outputPath: string, 
     outputFormat: string,
-    options: { width?: number; height?: number } = {}
-  ): Promise<ProcessingResult> {
-    const { width, height } = options;
-    const startTime = Date.now();
+    options: { 
+      quality?: number;  // Default 92 for RAW
+      width?: number; 
+      height?: number;
+      resizePercentage?: number;
+    } = {}
+  ): Promise<{ 
+    success: boolean; 
+    finalSize: number; 
+    qualityUsed: number;
+    baselineSize: number;  // Uncompressed reference size
+    wasCompressed: boolean;
+  }> {
+    const quality = options.quality || 92; // Optimal for RAW: high quality but some compression
+    const { width, height, resizePercentage } = options;
     
     try {
-      // Get original file size with validation
-      const originalSize = await FileSizeUtils.getFileSizeWithValidation(inputPath);
-      console.log(`🎯 RAW Conversion Only (100% quality): ${inputPath} -> ${outputPath}, Original size: ${FileSizeUtils.formatFileSize(originalSize)}`);
+      console.log(`🎯 Smart RAW Conversion: ${inputPath} -> ${outputFormat} at ${quality}% quality`);
       
-      // Load dcraw dynamically
-      const dcrawModule = await loadDcraw();
-      if (!dcrawModule) {
-        throw new RAWProcessingError(
-          'dcraw not available in this environment',
-          RAW_ERROR_CODES.DCRAW_FAILED,
-          undefined,
-          'Install dcraw package or use alternative processing method'
-        );
-      }
+      // Step 1: Get RAW file info
+      const rawStats = await fs.stat(inputPath);
+      console.log(`📊 RAW file size: ${rawStats.size} bytes (compressed RAW format)`);
       
-      // Read the RAW file
-      const rawBuffer = await fs.readFile(inputPath);
+      // Step 2: Convert RAW to uncompressed TIFF (baseline reference)
+      const baselineTiffPath = `${outputPath}.baseline.tiff`;
       
-      // Process with dcraw - extract as TIFF for maximum quality (NO COMPRESSION)
-      const dcrawOptions: any = {
-        exportAsTiff: true,
-        use16BitLinearMode: false, // Use 8-bit for compatibility
-        useExportMode: true,
-        noAutoBrightness: false, // Allow auto brightness for better results
-        verbose: false
-      };
-      
-      const result = dcrawModule(rawBuffer, dcrawOptions);
-      
-      if (!result || result.length === 0) {
-        throw new RAWProcessingError(
-          'dcraw processing returned empty result',
-          RAW_ERROR_CODES.DCRAW_FAILED,
-          undefined,
-          'Try using ImageMagick fallback processing'
-        );
-      }
-      
-      console.log(`✅ dcraw processed ${FileSizeUtils.formatFileSize(rawBuffer.length)} -> ${FileSizeUtils.formatFileSize(result.length)}`);
-      
-      // Now use Sharp to convert the TIFF to the desired output format (100% quality)
-      let sharpInstance = sharp(result);
-      
-      // Apply resizing if specified (maintain aspect ratio)
-      if (width || height) {
-        sharpInstance = sharpInstance.resize(width, height, {
-          fit: 'inside',
-          withoutEnlargement: true
+      // Try dcraw_emu first (best quality)
+      try {
+        const dcrawCommand = `dcraw_emu -w -T "${inputPath}"`;
+        console.log(`🔧 Running dcraw_emu: ${dcrawCommand}`);
+        await execAsync(dcrawCommand);
+        
+        // dcraw creates TIFF with same base name
+        const baseName = inputPath.replace(/\.[^/.]+$/, "");
+        const dcrawOutput = baseName + '.tiff';
+        
+        // Verify and rename to our baseline path
+        await fs.access(dcrawOutput);
+        await fs.rename(dcrawOutput, baselineTiffPath);
+        
+        console.log(`✅ dcraw_emu successful`);
+      } catch (dcrawError) {
+        console.log(`⚠️ dcraw_emu failed, trying Node.js dcraw package...`);
+        
+        // Fallback to Node.js dcraw package
+        const dcrawModule = await loadDcraw();
+        if (!dcrawModule) {
+          throw new Error('No RAW processing available - dcraw not found');
+        }
+        
+        const rawBuffer = await fs.readFile(inputPath);
+        const result = dcrawModule(rawBuffer, {
+          exportAsTiff: true,
+          use16BitLinearMode: false,
+          useExportMode: true,
+          noAutoBrightness: false,
+          verbose: false
         });
+        
+        if (!result || result.length === 0) {
+          throw new Error('dcraw processing returned empty result');
+        }
+        
+        await fs.writeFile(baselineTiffPath, result);
+        console.log(`✅ Node.js dcraw successful`);
       }
       
-      // Convert to final format with MAXIMUM quality (NO COMPRESSION)
+      // Step 3: Get baseline (uncompressed) size for proper compression ratio calculation
+      const baselineStats = await fs.stat(baselineTiffPath);
+      const baselineSize = baselineStats.size;
+      console.log(`📊 Baseline uncompressed size: ${baselineSize} bytes`);
+      
+      // Step 4: Apply resize if specified
+      let processPath = baselineTiffPath;
+      if (resizePercentage && resizePercentage < 100) {
+        // Get actual dimensions
+        const identifyCommand = `identify -ping -format "%wx%h" "${baselineTiffPath}"`;
+        const { stdout } = await execAsync(identifyCommand);
+        const [actualWidth, actualHeight] = stdout.trim().split('x').map(Number);
+        
+        const targetWidth = Math.round(actualWidth * (resizePercentage / 100));
+        const targetHeight = Math.round(actualHeight * (resizePercentage / 100));
+        
+        const resizedPath = `${outputPath}.resized.tiff`;
+        const resizeCommand = `convert "${baselineTiffPath}" -resize "${targetWidth}x${targetHeight}!" "${resizedPath}"`;
+        console.log(`🔧 Resizing: ${actualWidth}x${actualHeight} -> ${targetWidth}x${targetHeight}`);
+        await execAsync(resizeCommand);
+        
+        processPath = resizedPath;
+      }
+      
+      // Step 5: Convert to final format with intelligent compression
+      let convertCommand: string;
+      let wasCompressed = true;
+      
       switch (outputFormat.toLowerCase()) {
         case 'jpeg':
         case 'jpg':
-          await sharpInstance
-            .jpeg({ 
-              quality: 100,  // MAXIMUM QUALITY
-              progressive: false,
-              mozjpeg: false,
-              optimiseCoding: false,
-              trellisQuantisation: false
-            })
-            .toFile(outputPath);
+          // JPEG: 92% is optimal for RAW (visually lossless, good compression)
+          convertCommand = `convert "${processPath}" -quality ${quality} -sampling-factor 4:2:0 -strip "${outputPath}"`;
           break;
+          
         case 'png':
-          await sharpInstance
-            .png({ 
-              quality: 100,  // MAXIMUM QUALITY  
-              compressionLevel: 0,  // NO COMPRESSION
-              progressive: false 
-            })
-            .toFile(outputPath);
+          // PNG: Use compression level 8 (good balance)
+          convertCommand = `convert "${processPath}" -define png:compression-level=8 -strip "${outputPath}"`;
+          wasCompressed = true;
           break;
+          
         case 'webp':
-          await sharpInstance
-            .webp({ 
-              quality: 100,  // MAXIMUM QUALITY
-              lossless: true,  // LOSSLESS CONVERSION
-              smartSubsample: false
-            })
-            .toFile(outputPath);
+          // WebP: Quality-based compression
+          convertCommand = `convert "${processPath}" -quality ${quality} -define webp:method=6 "${outputPath}"`;
           break;
+          
         case 'avif':
-          await sharpInstance
-            .avif({ 
-              quality: 100,  // MAXIMUM QUALITY
-              lossless: true  // LOSSLESS CONVERSION
-            })
-            .toFile(outputPath);
+          // AVIF: Quality-based compression
+          convertCommand = `convert "${processPath}" -quality ${quality} "${outputPath}"`;
           break;
+          
         case 'tiff':
-          await sharpInstance
-            .tiff({ 
-              quality: 100,  // MAXIMUM QUALITY
-              compression: 'none'  // NO COMPRESSION
-            })
-            .toFile(outputPath);
+          // TIFF: LZW compression (lossless but compressed)
+          convertCommand = `convert "${processPath}" -compress lzw "${outputPath}"`;
+          wasCompressed = true;
           break;
+          
         default:
-          throw new RAWProcessingError(
-            `Unsupported output format: ${outputFormat}`,
-            RAW_ERROR_CODES.UNSUPPORTED_FORMAT,
-            undefined,
-            'Use supported formats: JPEG, PNG, WebP, AVIF, TIFF'
-          );
+          throw new Error(`Unsupported output format: ${outputFormat}`);
       }
       
-      console.log(`✅ RAW conversion completed (100% quality, no compression)`);
+      console.log(`🔧 Converting to ${outputFormat}: ${convertCommand}`);
+      await execAsync(convertCommand);
       
-      // Get final file stats with validation
-      const processedSize = await FileSizeUtils.getFileSizeWithValidation(outputPath);
-      const processingTime = Date.now() - startTime;
+      // Step 6: Get final file size
+      const finalStats = await fs.stat(outputPath);
+      const finalSize = finalStats.size;
       
-      // Create and validate result using robust validation
-      const rawResult = {
-        success: true,
-        originalSize,
-        processedSize,
-        qualityUsed: 100,
-        method: 'dcraw',
-        timing: {
-          processingTime,
-          method: 'dcraw + sharp'
+      // Step 7: Calculate compression ratio (using baseline, not RAW size)
+      const compressionRatio = Math.round(((baselineSize - finalSize) / baselineSize) * 100);
+      console.log(`📊 Compression: Baseline ${baselineSize} -> Final ${finalSize} = ${compressionRatio}% reduction`);
+      
+      // Cleanup temporary files
+      try {
+        await fs.unlink(baselineTiffPath);
+        if (resizePercentage && resizePercentage < 100) {
+          await fs.unlink(`${outputPath}.resized.tiff`);
         }
+      } catch (cleanupError) {
+        console.warn('Cleanup warning:', cleanupError);
+      }
+      
+      console.log(`✅ Smart RAW conversion complete: ${outputFormat.toUpperCase()} at ${quality}% quality`);
+      
+      return { 
+        success: true, 
+        finalSize,
+        qualityUsed: quality,
+        baselineSize,  // This is what we should use for compression ratio
+        wasCompressed
       };
       
-      return validateProcessingResult(rawResult, originalSize);
-      
     } catch (error) {
-      console.error(`❌ RAW conversion failed:`, error);
-      
-      if (error instanceof RAWProcessingError) {
-        throw error;
-      }
-      
-      throw new RAWProcessingError(
-        `RAW conversion failed: ${error.message}`,
-        RAW_ERROR_CODES.DCRAW_FAILED,
-        error as Error,
-        'Check file format compatibility and try alternative processing'
-      );
+      console.error(`❌ Smart RAW conversion failed:`, error);
+      throw new Error(`RAW conversion failed: ${error.message}`);
     }
   }
 

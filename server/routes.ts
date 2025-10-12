@@ -1417,51 +1417,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log(`File: ${file.originalname}, inputFormat: ${inputFormat}, fileExt: ${fileExtName}, isRawFile: ${isRawFile}`);
           
           if (isRawFile) {
-            console.log(`🎯 RAW FILE DETECTED: Converting ${file.originalname} with 100% quality (NO COMPRESSION)`);
-          }
-          
-          let result;
-          if (isRawFile || inputFormat === 'svg' || (inputFormat === 'svg' && outputFormat === 'tiff')) {
-            // Use the EXACT same engine as /professional-formats/convert for RAW files and SVG conversions
-            // SVG needs special handling for rasterization, especially when converting to TIFF
-            console.log(`Using professional formats conversion engine for ${file.originalname} -> ${outputFormat}`);
+            console.log(`🎯 RAW FILE DETECTED: Converting ${file.originalname} with intelligent compression`);
+            
             try {
-              // Calculate resize dimensions if needed  
-              // Handle both premium page format (resizeOption) and CR2 page format (direct resize parameter)
-              const shouldResize = (settings.resizeOption === 'resize-percentage' && settings.resizePercentage && settings.resizePercentage < 100) ||
-                                   (settings.resize && settings.resizePercentage && settings.resizePercentage < 100);
-              
-              result = await processSpecialFormatConversion(
+              // Use the new smart conversion method
+              result = await CompressionEngine.processRawConversionSmart(
                 file.path,
                 outputPath,
-                isRawFile ? 'raw' : fileExtName, // Professional formats engine expects 'raw' for all RAW files
                 outputFormat,
                 {
-                  quality: settings.quality,
-                  resize: shouldResize,
-                  resizePercentage: settings.resizePercentage,
-                  width: 0, // Will be calculated dynamically from actual image dimensions
-                  height: 0, // Will be calculated dynamically from actual image dimensions
-                  maintainAspect: true
+                  quality: settings.quality || 92,  // Default 92 for RAW
+                  resizePercentage: shouldResize ? settings.resizePercentage : undefined
                 }
               );
+              
               console.log(`RAW conversion result:`, result);
+              
+              // CRITICAL: Use baselineSize for compression ratio calculation
+              const originalSize = result.baselineSize;  // Use uncompressed baseline, not RAW file size
+              const compressedSize = result.finalSize;
+              const compressionRatio = originalSize > 0 
+                ? Math.round(((originalSize - compressedSize) / originalSize) * 100)
+                : 0;
+              
+              console.log(`📊 RAW Stats: Baseline ${originalSize} -> Final ${compressedSize} = ${compressionRatio}% reduction`);
+              
+              // Generate thumbnail
+              let thumbnailPath: string | undefined;
+              try {
+                thumbnailPath = await generateThumbnailFromRaw(outputPath, path.dirname(outputPath), jobId);
+                if (thumbnailPath) {
+                  previewUrl = `/api/preview/${jobId}`;
+                  console.log(`✅ Thumbnail generated: ${thumbnailPath}`);
+                }
+              } catch (thumbnailError) {
+                console.warn(`⚠️ Thumbnail generation failed:`, thumbnailError);
+              }
+              
+              // Store with proper stats
+              results.push({
+                id: jobId,
+                originalName: file.originalname,
+                originalSize: result.baselineSize,  // Use baseline size for display
+                compressedSize: result.finalSize,
+                compressionRatio: compressionRatio,
+                downloadUrl: `/api/download/${jobId}`,
+                originalFormat: originalFormat.toUpperCase(),
+                outputFormat: outputFormat.toUpperCase(),
+                wasConverted: true,
+                wasCompressed: result.wasCompressed,
+                ...(previewUrl && { previewUrl })
+              });
+              
+              console.log(`✅ RAW conversion complete for ${file.originalname}`);
+              continue; // Skip standard Sharp processing
+              
             } catch (error) {
-              console.error(`RAW conversion failed for ${file.originalname}:`, error);
+              console.error(`❌ RAW conversion failed for ${file.originalname}:`, error);
               throw error;
-            }
-
-            // Validate the RAW processing result using industry-standard validation
-            const originalFileSize = await FileSizeUtils.getFileSizeWithValidation(file.path);
-            console.log(`📊 RAW Processing - Original file: ${FileSizeUtils.formatFileSize(originalFileSize)}`);
-            
-            if (!result) {
-              throw new RAWProcessingError(
-                'RAW conversion returned null result',
-                RAW_ERROR_CODES.DCRAW_FAILED,
-                undefined,
-                'Try refreshing and uploading the file again'
-              );
             }
             
           } else {
@@ -6092,24 +6105,27 @@ async function processSpecialFormatConversion(
         // Continue with existing ImageMagick processing logic...
         
       } catch (dcrawEmuError) {
-        console.log(`⚠️ dcraw_emu failed: ${dcrawEmuError.message}`);
+        console.log(`⚠️ dcraw_emu failed: ${dcrawEmuError instanceof Error ? dcrawEmuError.message : String(dcrawEmuError)}`);
         console.log(`🔄 Falling back to Node.js dcraw package...`);
         
         try {
-          // Use simplified conversion-only method (100% quality, no compression)
-          const conversionResult = await CompressionEngine.processRawConversionOnly(inputPath, outputPath, outputFormat, {
-            width: options.width,
-            height: options.height
-          });
+          // Use the new smart conversion method for better results
+          const smartResult = await CompressionEngine.processRawConversionSmart(
+            inputPath, 
+            outputPath, 
+            outputFormat, 
+            {
+              quality: options.quality || 92,
+              resizePercentage: options.resizePercentage
+            }
+          );
           
-          console.log(`✅ RAW conversion completed (100% quality, no compression)`);
-          return { success: true, outputSize: conversionResult.processedSize };
+          console.log(`✅ Smart RAW conversion completed`);
+          return { success: true, outputSize: smartResult.finalSize };
           
-        } catch (dcrawNodeError) {
-          console.error(`❌ Both dcraw_emu and Node.js dcraw failed:`);
-          console.error(`dcraw_emu error: ${dcrawEmuError.message}`);
-          console.error(`dcraw package error: ${dcrawNodeError.message}`);
-          throw new Error(`Failed to convert raw to ${outputFormat}: ${dcrawNodeError.message}`);
+        } catch (smartError) {
+          console.error(`❌ Smart RAW conversion failed: ${smartError instanceof Error ? smartError.message : String(smartError)}`);
+          throw new Error(`Failed to convert raw to ${outputFormat}: ${smartError instanceof Error ? smartError.message : String(smartError)}`);
         }
       }
       
