@@ -248,7 +248,10 @@ export function useHybridProcessor({
     processFiles,
     isProcessing,
     getProcessingInfo,
-    supportedRAWFormats: Object.keys(RAW_FORMATS),
+    supportedRAWFormats: [
+      'cr2', 'cr3', 'crw', 'nef', 'arw', 'dng', 'orf', 'raf', 'rw2', 
+      '3fr', 'dcr', 'erf', 'fff', 'mrw', 'pef', 'x3f', 'raw'
+    ],
     isRAWFile: rawProcessor.isRAWFile
   };
 }
