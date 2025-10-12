@@ -37,6 +37,8 @@ async function loadDcraw() {
 
 const execAsync = promisify(exec);
 
+import { validateProcessingResult, ProcessingResult, RAWProcessingError, RAW_ERROR_CODES, SafeMath, FileSizeUtils } from './rawProcessingUtils';
+
 export interface CompressionAnalysis {
   originalSize: number;
   estimatedCompressedSize: number;
@@ -78,17 +80,25 @@ export class CompressionEngine {
     outputPath: string, 
     outputFormat: string,
     options: { width?: number; height?: number } = {}
-  ): Promise<{ success: boolean; finalSize: number; qualityUsed: number }> {
+  ): Promise<ProcessingResult> {
     const { width, height } = options;
+    const startTime = Date.now();
     
     try {
+      // Get original file size with validation
+      const originalSize = await FileSizeUtils.getFileSizeWithValidation(inputPath);
+      console.log(`🎯 RAW Conversion Only (100% quality): ${inputPath} -> ${outputPath}, Original size: ${FileSizeUtils.formatFileSize(originalSize)}`);
+      
       // Load dcraw dynamically
       const dcrawModule = await loadDcraw();
       if (!dcrawModule) {
-        throw new Error('dcraw not available in this environment');
+        throw new RAWProcessingError(
+          'dcraw not available in this environment',
+          RAW_ERROR_CODES.DCRAW_FAILED,
+          undefined,
+          'Install dcraw package or use alternative processing method'
+        );
       }
-      
-      console.log(`🎯 RAW Conversion Only (100% quality): ${inputPath} -> ${outputPath}`);
       
       // Read the RAW file
       const rawBuffer = await fs.readFile(inputPath);
@@ -105,10 +115,15 @@ export class CompressionEngine {
       const result = dcrawModule(rawBuffer, dcrawOptions);
       
       if (!result || result.length === 0) {
-        throw new Error('dcraw processing returned empty result');
+        throw new RAWProcessingError(
+          'dcraw processing returned empty result',
+          RAW_ERROR_CODES.DCRAW_FAILED,
+          undefined,
+          'Try using ImageMagick fallback processing'
+        );
       }
       
-      console.log(`✅ dcraw processed ${rawBuffer.length} bytes -> ${result.length} bytes`);
+      console.log(`✅ dcraw processed ${FileSizeUtils.formatFileSize(rawBuffer.length)} -> ${FileSizeUtils.formatFileSize(result.length)}`);
       
       // Now use Sharp to convert the TIFF to the desired output format (100% quality)
       let sharpInstance = sharp(result);
@@ -170,22 +185,48 @@ export class CompressionEngine {
             .toFile(outputPath);
           break;
         default:
-          throw new Error(`Unsupported output format: ${outputFormat}`);
+          throw new RAWProcessingError(
+            `Unsupported output format: ${outputFormat}`,
+            RAW_ERROR_CODES.UNSUPPORTED_FORMAT,
+            undefined,
+            'Use supported formats: JPEG, PNG, WebP, AVIF, TIFF'
+          );
       }
       
       console.log(`✅ RAW conversion completed (100% quality, no compression)`);
       
-      // Get final file stats and return proper structure
-      const stats = await fs.stat(outputPath);
-      return { 
-        success: true, 
-        finalSize: stats.size,    // Changed from outputSize
-        qualityUsed: 100          // Add this for consistency
+      // Get final file stats with validation
+      const processedSize = await FileSizeUtils.getFileSizeWithValidation(outputPath);
+      const processingTime = Date.now() - startTime;
+      
+      // Create and validate result using robust validation
+      const rawResult = {
+        success: true,
+        originalSize,
+        processedSize,
+        qualityUsed: 100,
+        method: 'dcraw',
+        timing: {
+          processingTime,
+          method: 'dcraw + sharp'
+        }
       };
+      
+      return validateProcessingResult(rawResult, originalSize);
       
     } catch (error) {
       console.error(`❌ RAW conversion failed:`, error);
-      throw new Error(`RAW conversion failed: ${error.message}`);
+      
+      if (error instanceof RAWProcessingError) {
+        throw error;
+      }
+      
+      throw new RAWProcessingError(
+        `RAW conversion failed: ${error.message}`,
+        RAW_ERROR_CODES.DCRAW_FAILED,
+        error as Error,
+        'Check file format compatibility and try alternative processing'
+      );
     }
   }
 

@@ -4490,6 +4490,137 @@ var import_fs = require("fs");
 var import_path = __toESM(require("path"), 1);
 var import_child_process = require("child_process");
 var import_util = require("util");
+
+// server/rawProcessingUtils.ts
+function validateProcessingResult(result, originalFileSize) {
+  console.log("\u{1F50D} Validating processing result:", result);
+  if (!result || typeof result !== "object") {
+    throw new Error("Invalid processing result structure");
+  }
+  const processedSize = Number(
+    result.processedSize || result.finalSize || result.outputSize || result.compressedSize || 0
+  );
+  const originalSize = Number(originalFileSize) || 0;
+  if (originalSize <= 0) {
+    throw new Error(`Invalid original file size: ${originalSize}`);
+  }
+  if (processedSize <= 0) {
+    throw new Error(`Invalid processed file size: ${processedSize}`);
+  }
+  let compressionRatio = 0;
+  if (originalSize > 0 && processedSize > 0) {
+    compressionRatio = Math.round(
+      (originalSize - processedSize) / originalSize * 100
+    );
+    compressionRatio = Math.max(-500, Math.min(100, compressionRatio));
+  }
+  const validated = {
+    success: Boolean(result.success !== false),
+    // Default to true if not specified
+    originalSize,
+    processedSize,
+    compressionRatio,
+    qualityAchieved: Number(result.qualityUsed || result.quality || 100),
+    processingMethod: result.method || result.processingMethod || "dcraw",
+    metadata: result.metadata || void 0,
+    timing: result.timing || void 0
+  };
+  const numericFields = ["originalSize", "processedSize", "compressionRatio", "qualityAchieved"];
+  for (const field of numericFields) {
+    const value = validated[field];
+    if (typeof value === "number" && (isNaN(value) || !isFinite(value))) {
+      console.error(`\u274C Invalid ${field}: ${value}`);
+      throw new Error(`Invalid numeric value for ${field}: ${value}`);
+    }
+  }
+  console.log("\u2705 Validation successful:", validated);
+  return validated;
+}
+var RAWProcessingError = class extends Error {
+  constructor(message, code, originalError, suggestedAction) {
+    super(message);
+    this.code = code;
+    this.originalError = originalError;
+    this.suggestedAction = suggestedAction;
+    this.name = "RAWProcessingError";
+  }
+};
+var RAW_ERROR_CODES = {
+  UNSUPPORTED_FORMAT: "RAW_001",
+  CORRUPTED_FILE: "RAW_002",
+  PROCESSING_TIMEOUT: "RAW_003",
+  INSUFFICIENT_MEMORY: "RAW_004",
+  INVALID_PARAMETERS: "RAW_005",
+  NAN_CALCULATION: "RAW_006",
+  FILE_TOO_LARGE: "RAW_007",
+  DCRAW_FAILED: "RAW_008"
+};
+var SafeMath = class {
+  static divide(numerator, denominator, defaultValue = 0) {
+    if (!isFinite(numerator) || !isFinite(denominator) || denominator === 0) {
+      return defaultValue;
+    }
+    const result = numerator / denominator;
+    return isFinite(result) ? result : defaultValue;
+  }
+  static multiply(a, b, defaultValue = 0) {
+    if (!isFinite(a) || !isFinite(b)) {
+      return defaultValue;
+    }
+    const result = a * b;
+    return isFinite(result) ? result : defaultValue;
+  }
+  static percentage(part, total) {
+    return this.multiply(this.divide(part, total, 0), 100, 0);
+  }
+  static compressionRatio(original, compressed) {
+    if (original <= 0 || compressed < 0) return 0;
+    return Math.round(this.percentage(original - compressed, original));
+  }
+};
+var FileSizeUtils = class {
+  static async getFileSizeWithValidation(filePath) {
+    try {
+      const fs7 = await import("fs/promises");
+      const stats = await fs7.stat(filePath);
+      if (!stats.isFile()) {
+        throw new RAWProcessingError(
+          `Path is not a file: ${filePath}`,
+          RAW_ERROR_CODES.INVALID_PARAMETERS
+        );
+      }
+      const size = stats.size;
+      if (!isFinite(size) || size < 0) {
+        throw new RAWProcessingError(
+          `Invalid file size: ${size}`,
+          RAW_ERROR_CODES.CORRUPTED_FILE
+        );
+      }
+      return size;
+    } catch (error) {
+      if (error instanceof RAWProcessingError) throw error;
+      throw new RAWProcessingError(
+        `Failed to get file size for ${filePath}`,
+        RAW_ERROR_CODES.CORRUPTED_FILE,
+        error,
+        "Verify file exists and is accessible"
+      );
+    }
+  }
+  static formatFileSize(bytes) {
+    if (!isFinite(bytes) || bytes < 0) return "0 B";
+    const units = ["B", "KB", "MB", "GB"];
+    let size = bytes;
+    let unitIndex = 0;
+    while (size >= 1024 && unitIndex < units.length - 1) {
+      size /= 1024;
+      unitIndex++;
+    }
+    return `${size.toFixed(1)} ${units[unitIndex]}`;
+  }
+};
+
+// server/compressionEngine.ts
 var import_meta = {};
 import_sharp.default.cache({
   memory: 512,
@@ -4525,12 +4656,19 @@ var CompressionEngine = class _CompressionEngine {
    */
   static async processRawConversionOnly(inputPath, outputPath, outputFormat, options = {}) {
     const { width, height } = options;
+    const startTime = Date.now();
     try {
+      const originalSize = await FileSizeUtils.getFileSizeWithValidation(inputPath);
+      console.log(`\u{1F3AF} RAW Conversion Only (100% quality): ${inputPath} -> ${outputPath}, Original size: ${FileSizeUtils.formatFileSize(originalSize)}`);
       const dcrawModule = await loadDcraw();
       if (!dcrawModule) {
-        throw new Error("dcraw not available in this environment");
+        throw new RAWProcessingError(
+          "dcraw not available in this environment",
+          RAW_ERROR_CODES.DCRAW_FAILED,
+          void 0,
+          "Install dcraw package or use alternative processing method"
+        );
       }
-      console.log(`\u{1F3AF} RAW Conversion Only (100% quality): ${inputPath} -> ${outputPath}`);
       const rawBuffer = await import_fs.promises.readFile(inputPath);
       const dcrawOptions = {
         exportAsTiff: true,
@@ -4543,9 +4681,14 @@ var CompressionEngine = class _CompressionEngine {
       };
       const result = dcrawModule(rawBuffer, dcrawOptions);
       if (!result || result.length === 0) {
-        throw new Error("dcraw processing returned empty result");
+        throw new RAWProcessingError(
+          "dcraw processing returned empty result",
+          RAW_ERROR_CODES.DCRAW_FAILED,
+          void 0,
+          "Try using ImageMagick fallback processing"
+        );
       }
-      console.log(`\u2705 dcraw processed ${rawBuffer.length} bytes -> ${result.length} bytes`);
+      console.log(`\u2705 dcraw processed ${FileSizeUtils.formatFileSize(rawBuffer.length)} -> ${FileSizeUtils.formatFileSize(result.length)}`);
       let sharpInstance = (0, import_sharp.default)(result);
       if (width || height) {
         sharpInstance = sharpInstance.resize(width, height, {
@@ -4600,12 +4743,39 @@ var CompressionEngine = class _CompressionEngine {
           }).toFile(outputPath);
           break;
         default:
-          throw new Error(`Unsupported output format: ${outputFormat}`);
+          throw new RAWProcessingError(
+            `Unsupported output format: ${outputFormat}`,
+            RAW_ERROR_CODES.UNSUPPORTED_FORMAT,
+            void 0,
+            "Use supported formats: JPEG, PNG, WebP, AVIF, TIFF"
+          );
       }
       console.log(`\u2705 RAW conversion completed (100% quality, no compression)`);
+      const processedSize = await FileSizeUtils.getFileSizeWithValidation(outputPath);
+      const processingTime = Date.now() - startTime;
+      const rawResult = {
+        success: true,
+        originalSize,
+        processedSize,
+        qualityUsed: 100,
+        method: "dcraw",
+        timing: {
+          processingTime,
+          method: "dcraw + sharp"
+        }
+      };
+      return validateProcessingResult(rawResult, originalSize);
     } catch (error) {
       console.error(`\u274C RAW conversion failed:`, error);
-      throw new Error(`RAW conversion failed: ${error.message}`);
+      if (error instanceof RAWProcessingError) {
+        throw error;
+      }
+      throw new RAWProcessingError(
+        `RAW conversion failed: ${error.message}`,
+        RAW_ERROR_CODES.DCRAW_FAILED,
+        error,
+        "Check file format compatibility and try alternative processing"
+      );
     }
   }
   /**
@@ -10997,6 +11167,16 @@ async function registerRoutes(app2) {
               console.error(`RAW conversion failed for ${file.originalname}:`, error);
               throw error;
             }
+            const originalFileSize = await FileSizeUtils.getFileSizeWithValidation(file.path);
+            console.log(`\u{1F4CA} RAW Processing - Original file: ${FileSizeUtils.formatFileSize(originalFileSize)}`);
+            if (!result) {
+              throw new RAWProcessingError(
+                "RAW conversion returned null result",
+                RAW_ERROR_CODES.DCRAW_FAILED,
+                void 0,
+                "Try refreshing and uploading the file again"
+              );
+            }
           } else {
             let sharpOperation = (0, import_sharp4.default)(file.path);
             if (settings.resizeOption === "resize-percentage" && settings.resizePercentage && settings.resizePercentage < 100) {
@@ -11038,9 +11218,35 @@ async function registerRoutes(app2) {
             const stats = await import_promises.default.stat(outputPath);
             result = { success: true, outputSize: stats.size };
           }
-          const originalStats = await import_promises.default.stat(file.path);
-          const compressedStats = await import_promises.default.stat(outputPath);
-          const compressionRatio = originalStats.size > 0 ? Math.round((1 - compressedStats.size / originalStats.size) * 100) : 0;
+          let originalStats, compressedStats;
+          try {
+            originalStats = { size: await FileSizeUtils.getFileSizeWithValidation(file.path) };
+            compressedStats = { size: await FileSizeUtils.getFileSizeWithValidation(outputPath) };
+          } catch (sizeError) {
+            console.error(`\u274C File size validation failed:`, sizeError);
+            throw new RAWProcessingError(
+              "File size validation failed",
+              RAW_ERROR_CODES.CORRUPTED_FILE,
+              sizeError,
+              "Verify files were processed correctly"
+            );
+          }
+          console.log(`\u{1F4CA} STATS DEBUG for ${file.originalname}:`);
+          console.log(`- originalStats.size: ${originalStats.size} (${FileSizeUtils.formatFileSize(originalStats.size)})`);
+          console.log(`- compressedStats.size: ${compressedStats.size} (${FileSizeUtils.formatFileSize(compressedStats.size)})`);
+          console.log(`- result type: ${typeof result}`);
+          const compressionRatio = SafeMath.compressionRatio(originalStats.size, compressedStats.size);
+          console.log(`\u{1F522} CALCULATED compressionRatio: ${compressionRatio}% (Safe calculation)`);
+          if (!isFinite(compressionRatio)) {
+            console.error(`\u274C COMPRESSION RATIO IS NOT FINITE! originalSize: ${originalStats.size}, compressedSize: ${compressedStats.size}`);
+            throw new RAWProcessingError(
+              "Compression ratio calculation failed",
+              RAW_ERROR_CODES.NAN_CALCULATION,
+              void 0,
+              "File processing may have failed silently"
+            );
+          }
+          console.log(`Conversion stats for ${file.originalname} - Original: ${originalStats.size}, Final: ${compressedStats.size}, Ratio: ${compressionRatio}%`);
           const jobUpdate = storage.updateCompressionJob(job.id, {
             status: "completed",
             compressedPath: outputPath,
@@ -11054,7 +11260,9 @@ async function registerRoutes(app2) {
             // Use actual job ID
             originalName: file.originalname,
             originalSize: originalStats.size,
+            // Ensure this is always set with validation
             compressedSize: compressedStats.size,
+            // Ensure this is always set with validation
             compressionRatio,
             downloadUrl: `/api/download/${job.id}`,
             originalFormat: file.mimetype.split("/")[1].toUpperCase(),
@@ -11069,6 +11277,23 @@ async function registerRoutes(app2) {
               webOptimization: settings.webOptimization || "optimize-web"
             }
           };
+          console.log(`\u{1F50D} FINAL VALIDATION for ${file.originalname}:`);
+          console.log(`- resultData.originalSize: ${resultData.originalSize} (${FileSizeUtils.formatFileSize(resultData.originalSize)})`);
+          console.log(`- resultData.compressedSize: ${resultData.compressedSize} (${FileSizeUtils.formatFileSize(resultData.compressedSize)})`);
+          console.log(`- resultData.compressionRatio: ${resultData.compressionRatio}%`);
+          const numericFields = ["originalSize", "compressedSize", "compressionRatio"];
+          for (const field of numericFields) {
+            const value = resultData[field];
+            if (typeof value !== "number" || !isFinite(value)) {
+              console.error(`\u274C INVALID ${field}: ${value} (type: ${typeof value})`);
+              throw new RAWProcessingError(
+                `Invalid ${field}: ${value}`,
+                RAW_ERROR_CODES.NAN_CALCULATION,
+                void 0,
+                "File processing validation failed"
+              );
+            }
+          }
           console.log(`${outputFormat.toUpperCase()} compression result for ${file.originalname}:`, {
             size: `${originalStats.size} -> ${compressedStats.size}`,
             ratio: `${compressionRatio}%`,
@@ -14397,12 +14622,12 @@ async function processSpecialFormatConversion(inputPath, outputPath, inputFormat
         console.log(`\u26A0\uFE0F dcraw_emu failed: ${dcrawEmuError.message}`);
         console.log(`\u{1F504} Falling back to Node.js dcraw package...`);
         try {
-          await compressionEngine_default.processRawConversionOnly(inputPath, outputPath, outputFormat, {
+          const conversionResult = await compressionEngine_default.processRawConversionOnly(inputPath, outputPath, outputFormat, {
             width: options.width,
             height: options.height
           });
           console.log(`\u2705 RAW conversion completed (100% quality, no compression)`);
-          return { finalSize: (await import_promises.default.stat(outputPath)).size };
+          return { success: true, outputSize: conversionResult.processedSize };
         } catch (dcrawNodeError) {
           console.error(`\u274C Both dcraw_emu and Node.js dcraw failed:`);
           console.error(`dcraw_emu error: ${dcrawEmuError.message}`);

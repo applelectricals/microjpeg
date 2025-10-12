@@ -28,6 +28,7 @@ import { pageIdentifierMiddleware } from './pageIdentifierMiddleware';
 import { DualUsageTracker } from './services/DualUsageTracker';
 import { OPERATION_CONFIG } from './config/operationLimits';
 import { ensureSuperuser, logAdminAction, getAppSettings, updateAppSettings, setSuperuserBypass } from './superuser';
+import { validateProcessingResult, ProcessingResult, RAWProcessingError, RAW_ERROR_CODES, SafeMath, FileSizeUtils, QUALITY_PRESETS } from './rawProcessingUtils';
 import { adminAuditLogs, userUsage } from '@shared/schema';
 import { registerConversionRoutes } from './conversionMiddleware';
 import { subscriptionTierAccessControl, tierBasedRouting, apiTierAccessControl } from './subscriptionTierMiddleware';
@@ -1450,10 +1451,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
               throw error;
             }
 
-            // Ensure result has required properties for RAW conversion
-            if (!result || typeof result.outputSize === 'undefined') {
-              console.error(`Invalid result from RAW conversion:`, result);
-              throw new Error('RAW conversion returned invalid result');
+            // Validate the RAW processing result using industry-standard validation
+            const originalFileSize = await FileSizeUtils.getFileSizeWithValidation(file.path);
+            console.log(`📊 RAW Processing - Original file: ${FileSizeUtils.formatFileSize(originalFileSize)}`);
+            
+            if (!result) {
+              throw new RAWProcessingError(
+                'RAW conversion returned null result',
+                RAW_ERROR_CODES.DCRAW_FAILED,
+                undefined,
+                'Try refreshing and uploading the file again'
+              );
             }
             
           } else {
@@ -1504,37 +1512,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
             result = { success: true, outputSize: stats.size };
           }
           
-          // Get file stats (common for both RAW and standard files)
-          const originalStats = await fs.stat(file.path);
-          const compressedStats = await fs.stat(outputPath);
+          // Get file stats using robust validation (common for both RAW and standard files)
+          let originalStats, compressedStats;
+          
+          try {
+            originalStats = { size: await FileSizeUtils.getFileSizeWithValidation(file.path) };
+            compressedStats = { size: await FileSizeUtils.getFileSizeWithValidation(outputPath) };
+          } catch (sizeError) {
+            console.error(`❌ File size validation failed:`, sizeError);
+            throw new RAWProcessingError(
+              'File size validation failed',
+              RAW_ERROR_CODES.CORRUPTED_FILE,
+              sizeError as Error,
+              'Verify files were processed correctly'
+            );
+          }
           
           // Debug logging for NaN detection
           console.log(`📊 STATS DEBUG for ${file.originalname}:`);
-          console.log(`- originalStats.size: ${originalStats.size} (type: ${typeof originalStats.size})`);
-          console.log(`- compressedStats.size: ${compressedStats.size} (type: ${typeof compressedStats.size})`);
-          console.log(`- result: ${JSON.stringify(result)}`);
-          console.log(`- result.outputSize: ${result?.outputSize} (type: ${typeof result?.outputSize})`);
+          console.log(`- originalStats.size: ${originalStats.size} (${FileSizeUtils.formatFileSize(originalStats.size)})`);
+          console.log(`- compressedStats.size: ${compressedStats.size} (${FileSizeUtils.formatFileSize(compressedStats.size)})`);
+          console.log(`- result type: ${typeof result}`);
           
-          // Ensure both sizes are valid numbers
-          if (!originalStats || typeof originalStats.size !== 'number' || isNaN(originalStats.size)) {
-            throw new Error(`Invalid original file size: ${originalStats?.size}`);
-          }
+          // Calculate compression ratio using safe math
+          const compressionRatio = SafeMath.compressionRatio(originalStats.size, compressedStats.size);
           
-          if (!compressedStats || typeof compressedStats.size !== 'number' || isNaN(compressedStats.size)) {
-            throw new Error(`Invalid compressed file size: ${compressedStats?.size}`);
-          }
+          console.log(`🔢 CALCULATED compressionRatio: ${compressionRatio}% (Safe calculation)`);
           
-          // Calculate compression ratio using original file size
-          const compressionRatio = originalStats.size > 0 
-            ? Math.round((1 - compressedStats.size / originalStats.size) * 100)
-            : 0; // Prevent NaN when original size is 0
-            
-          console.log(`🔢 CALCULATED compressionRatio: ${compressionRatio} (type: ${typeof compressionRatio})`);
-          
-          // Validate compression ratio is not NaN
-          if (isNaN(compressionRatio)) {
-            console.error(`❌ COMPRESSION RATIO IS NaN! originalSize: ${originalStats.size}, compressedSize: ${compressedStats.size}`);
-            throw new Error('Compression ratio calculation resulted in NaN');
+          // Validate final compression ratio
+          if (!isFinite(compressionRatio)) {
+            console.error(`❌ COMPRESSION RATIO IS NOT FINITE! originalSize: ${originalStats.size}, compressedSize: ${compressedStats.size}`);
+            throw new RAWProcessingError(
+              'Compression ratio calculation failed',
+              RAW_ERROR_CODES.NAN_CALCULATION,
+              undefined,
+              'File processing may have failed silently'
+            );
           }
             
           console.log(`Conversion stats for ${file.originalname} - Original: ${originalStats.size}, Final: ${compressedStats.size}, Ratio: ${compressionRatio}%`);
@@ -1552,8 +1565,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const resultData = {
             id: job.id, // Use actual job ID
             originalName: file.originalname,
-            originalSize: originalStats.size,  // Ensure this is always set
-            compressedSize: compressedStats.size,  // Ensure this is always set
+            originalSize: originalStats.size,  // Ensure this is always set with validation
+            compressedSize: compressedStats.size,  // Ensure this is always set with validation
             compressionRatio,
             downloadUrl: `/api/download/${job.id}`,
             originalFormat: file.mimetype.split('/')[1].toUpperCase(),
@@ -1569,15 +1582,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           };
 
-          // Final validation before pushing to results
+          // Final validation using industry-standard validation patterns
           console.log(`🔍 FINAL VALIDATION for ${file.originalname}:`);
-          console.log(`- resultData.originalSize: ${resultData.originalSize} (isNaN: ${isNaN(resultData.originalSize)})`);
-          console.log(`- resultData.compressedSize: ${resultData.compressedSize} (isNaN: ${isNaN(resultData.compressedSize)})`);
-          console.log(`- resultData.compressionRatio: ${resultData.compressionRatio} (isNaN: ${isNaN(resultData.compressionRatio)})`);
+          console.log(`- resultData.originalSize: ${resultData.originalSize} (${FileSizeUtils.formatFileSize(resultData.originalSize)})`);
+          console.log(`- resultData.compressedSize: ${resultData.compressedSize} (${FileSizeUtils.formatFileSize(resultData.compressedSize)})`);
+          console.log(`- resultData.compressionRatio: ${resultData.compressionRatio}%`);
           
-          if (isNaN(resultData.originalSize) || isNaN(resultData.compressedSize) || isNaN(resultData.compressionRatio)) {
-            console.error(`❌ NaN DETECTED IN RESULT DATA:`, resultData);
-            throw new Error('NaN values detected in final result data');
+          // Comprehensive validation using the new validation utility
+          const numericFields = ['originalSize', 'compressedSize', 'compressionRatio'];
+          for (const field of numericFields) {
+            const value = resultData[field as keyof typeof resultData] as number;
+            if (typeof value !== 'number' || !isFinite(value)) {
+              console.error(`❌ INVALID ${field}: ${value} (type: ${typeof value})`);
+              throw new RAWProcessingError(
+                `Invalid ${field}: ${value}`,
+                RAW_ERROR_CODES.NAN_CALCULATION,
+                undefined,
+                'File processing validation failed'
+              );
+            }
           }
 
           console.log(`${outputFormat.toUpperCase()} compression result for ${file.originalname}:`, {
@@ -6080,7 +6103,7 @@ async function processSpecialFormatConversion(
           });
           
           console.log(`✅ RAW conversion completed (100% quality, no compression)`);
-          return { success: true, outputSize: conversionResult.finalSize };
+          return { success: true, outputSize: conversionResult.processedSize };
           
         } catch (dcrawNodeError) {
           console.error(`❌ Both dcraw_emu and Node.js dcraw failed:`);
