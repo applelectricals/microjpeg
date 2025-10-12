@@ -1,42 +1,22 @@
-# Multi-stage build for production optimization
-FROM node:20 AS builder
+# Simple single-stage build like Replit
+FROM node:20
 
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
 
-# Install all dependencies (including devDependencies for build)
+# Install all dependencies (including dev dependencies for build)
 RUN npm install
 
-# Copy source code
+# Copy all source code
 COPY . .
 
-# Build the frontend (Vite) - outputs to dist/
-RUN npx vite build
+# Build exactly like Replit does
+RUN npm run build
 
-# Build the server - bundle but exclude problematic packages
-RUN npx esbuild server/index.prod.ts --platform=node --bundle --outfile=server-dist/index.cjs --format=cjs --packages=external
-
-# Production stage
-FROM node:20-slim AS production
-
-WORKDIR /app
-
-# Copy package files
-COPY package*.json ./
-
-# Install only production dependencies
-RUN npm ci --only=production && npm cache clean --force
-
-# Copy built assets from builder stage
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/server-dist ./server-dist
-
-# Copy static assets needed by the application
-COPY --from=builder /app/attached_assets ./attached_assets
-
+# Expose port
 EXPOSE 3000
 
-# Set production environment (this will be overridden by Coolify at runtime)
-ENV NODE_ENV=production
+# Start exactly like Replit does
+CMD ["npm", "start"]
