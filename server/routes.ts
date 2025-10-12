@@ -1450,17 +1450,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               throw error;
             }
 
-            // Get original file size BEFORE conversion
-            const originalStats = await fs.stat(file.path);
-
-            // Ensure result has required properties
+            // Ensure result has required properties for RAW conversion
             if (!result || typeof result.outputSize === 'undefined') {
               console.error(`Invalid result from RAW conversion:`, result);
               throw new Error('RAW conversion returned invalid result');
             }
-
-            const convertedStats = await fs.stat(outputPath);
-            console.log(`RAW conversion stats - Original: ${originalStats.size}, Converted: ${convertedStats.size}`);
             
           } else {
             // Use Sharp for standard image formats (JPEG, PNG, WEBP, etc.) - much faster
@@ -1514,10 +1508,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const originalStats = await fs.stat(file.path);
           const compressedStats = await fs.stat(outputPath);
           
+          // Debug logging for NaN detection
+          console.log(`📊 STATS DEBUG for ${file.originalname}:`);
+          console.log(`- originalStats.size: ${originalStats.size} (type: ${typeof originalStats.size})`);
+          console.log(`- compressedStats.size: ${compressedStats.size} (type: ${typeof compressedStats.size})`);
+          console.log(`- result: ${JSON.stringify(result)}`);
+          console.log(`- result.outputSize: ${result?.outputSize} (type: ${typeof result?.outputSize})`);
+          
+          // Ensure both sizes are valid numbers
+          if (!originalStats || typeof originalStats.size !== 'number' || isNaN(originalStats.size)) {
+            throw new Error(`Invalid original file size: ${originalStats?.size}`);
+          }
+          
+          if (!compressedStats || typeof compressedStats.size !== 'number' || isNaN(compressedStats.size)) {
+            throw new Error(`Invalid compressed file size: ${compressedStats?.size}`);
+          }
+          
           // Calculate compression ratio using original file size
           const compressionRatio = originalStats.size > 0 
             ? Math.round((1 - compressedStats.size / originalStats.size) * 100)
             : 0; // Prevent NaN when original size is 0
+            
+          console.log(`🔢 CALCULATED compressionRatio: ${compressionRatio} (type: ${typeof compressionRatio})`);
+          
+          // Validate compression ratio is not NaN
+          if (isNaN(compressionRatio)) {
+            console.error(`❌ COMPRESSION RATIO IS NaN! originalSize: ${originalStats.size}, compressedSize: ${compressedStats.size}`);
+            throw new Error('Compression ratio calculation resulted in NaN');
+          }
             
           console.log(`Conversion stats for ${file.originalname} - Original: ${originalStats.size}, Final: ${compressedStats.size}, Ratio: ${compressionRatio}%`);
           
@@ -1550,6 +1568,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
               webOptimization: settings.webOptimization || 'optimize-web'
             }
           };
+
+          // Final validation before pushing to results
+          console.log(`🔍 FINAL VALIDATION for ${file.originalname}:`);
+          console.log(`- resultData.originalSize: ${resultData.originalSize} (isNaN: ${isNaN(resultData.originalSize)})`);
+          console.log(`- resultData.compressedSize: ${resultData.compressedSize} (isNaN: ${isNaN(resultData.compressedSize)})`);
+          console.log(`- resultData.compressionRatio: ${resultData.compressionRatio} (isNaN: ${isNaN(resultData.compressionRatio)})`);
+          
+          if (isNaN(resultData.originalSize) || isNaN(resultData.compressedSize) || isNaN(resultData.compressionRatio)) {
+            console.error(`❌ NaN DETECTED IN RESULT DATA:`, resultData);
+            throw new Error('NaN values detected in final result data');
+          }
 
           console.log(`${outputFormat.toUpperCase()} compression result for ${file.originalname}:`, {
             size: `${originalStats.size} -> ${compressedStats.size}`,

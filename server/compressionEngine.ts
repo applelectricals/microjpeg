@@ -78,7 +78,7 @@ export class CompressionEngine {
     outputPath: string, 
     outputFormat: string,
     options: { width?: number; height?: number } = {}
-  ): Promise<void> {
+  ): Promise<{ success: boolean; finalSize: number; qualityUsed: number }> {
     const { width, height } = options;
     
     try {
