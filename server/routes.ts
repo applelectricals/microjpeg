@@ -1447,8 +1447,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.log(`RAW conversion result:`, result);
             } catch (error) {
               console.error(`RAW conversion failed for ${file.originalname}:`, error);
-              throw error; // Re-throw to be caught by the outer error handler
+              throw error;
             }
+
+            // Get original file size BEFORE conversion
+            const originalStats = await fs.stat(file.path);
+
+            // Ensure result has required properties
+            if (!result || typeof result.outputSize === 'undefined') {
+              console.error(`Invalid result from RAW conversion:`, result);
+              throw new Error('RAW conversion returned invalid result');
+            }
+
+            const convertedStats = await fs.stat(outputPath);
+            console.log(`RAW conversion stats - Original: ${originalStats.size}, Converted: ${convertedStats.size}`);
+            
           } else {
             // Use Sharp for standard image formats (JPEG, PNG, WEBP, etc.) - much faster
             let sharpOperation = sharp(file.path);
@@ -1497,13 +1510,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
             result = { success: true, outputSize: stats.size };
           }
           
-          // Get file stats
+          // Get file stats (common for both RAW and standard files)
           const originalStats = await fs.stat(file.path);
           const compressedStats = await fs.stat(outputPath);
+          
           // Calculate compression ratio using original file size
           const compressionRatio = originalStats.size > 0 
             ? Math.round((1 - compressedStats.size / originalStats.size) * 100)
             : 0; // Prevent NaN when original size is 0
+            
+          console.log(`Conversion stats for ${file.originalname} - Original: ${originalStats.size}, Final: ${compressedStats.size}, Ratio: ${compressionRatio}%`);
           
           // ✅ OPTIMIZATION: Collect job updates for batch execution
           const jobUpdate = storage.updateCompressionJob(job.id, {
@@ -1518,8 +1534,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const resultData = {
             id: job.id, // Use actual job ID
             originalName: file.originalname,
-            originalSize: originalStats.size,
-            compressedSize: compressedStats.size,
+            originalSize: originalStats.size,  // Ensure this is always set
+            compressedSize: compressedStats.size,  // Ensure this is always set
             compressionRatio,
             downloadUrl: `/api/download/${job.id}`,
             originalFormat: file.mimetype.split('/')[1].toUpperCase(),
@@ -6029,13 +6045,13 @@ async function processSpecialFormatConversion(
         
         try {
           // Use simplified conversion-only method (100% quality, no compression)
-          await CompressionEngine.processRawConversionOnly(inputPath, outputPath, outputFormat, {
+          const conversionResult = await CompressionEngine.processRawConversionOnly(inputPath, outputPath, outputFormat, {
             width: options.width,
             height: options.height
           });
           
           console.log(`✅ RAW conversion completed (100% quality, no compression)`);
-          return { finalSize: (await fs.stat(outputPath)).size };
+          return { success: true, outputSize: conversionResult.finalSize };
           
         } catch (dcrawNodeError) {
           console.error(`❌ Both dcraw_emu and Node.js dcraw failed:`);

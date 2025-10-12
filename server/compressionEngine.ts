@@ -175,6 +175,14 @@ export class CompressionEngine {
       
       console.log(`✅ RAW conversion completed (100% quality, no compression)`);
       
+      // Get final file stats and return proper structure
+      const stats = await fs.stat(outputPath);
+      return { 
+        success: true, 
+        finalSize: stats.size,    // Changed from outputSize
+        qualityUsed: 100          // Add this for consistency
+      };
+      
     } catch (error) {
       console.error(`❌ RAW conversion failed:`, error);
       throw new Error(`RAW conversion failed: ${error.message}`);
