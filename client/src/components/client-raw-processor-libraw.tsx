@@ -135,43 +135,39 @@ export function useClientRAWProcessor() {
           updateProgress('processing', 25 + (i * 60 / rawFiles.length), `Decoding RAW data for ${file.name}...`);
 
           // Initialize LibRaw processor
-          const processor = new LibRaw.LibRaw();
+          const processor = new LibRaw.default();
           
-          // Load the RAW file buffer
-          const loadResult = processor.open_buffer(uint8Array);
-          if (loadResult !== 0) {
-            throw new Error(`LibRaw failed to open file ${file.name} (error code: ${loadResult})`);
-          }
+          // LibRaw settings for high quality processing
+          const settings = {
+            bright: 1.0,
+            threshold: 0.0,
+            autoBrightThr: 0.01,
+            adjustMaximumThr: 0.75,
+            expShift: 1.0,
+            expPreser: 0.0,
+            halfSize: false,
+            fourColorRgb: false,
+            highlight: 0,
+            useAutoWb: false,
+            useCameraWb: true  // Use camera white balance
+          };
 
-          // Unpack the RAW data
-          const unpackResult = processor.unpack();
-          if (unpackResult !== 0) {
-            throw new Error(`LibRaw failed to unpack ${file.name} (error code: ${unpackResult})`);
-          }
+          // Open the RAW file with settings
+          await processor.open(uint8Array, settings);
 
           updateProgress('converting', 40 + (i * 60 / rawFiles.length), `Converting ${file.name} to RGB...`);
 
-          // Set processing parameters for high quality
-          processor.imgdata.params.use_camera_wb = 1;  // Use camera white balance
-          processor.imgdata.params.use_auto_wb = 0;    // Disable auto white balance
-          processor.imgdata.params.output_color = 1;   // sRGB color space
-          processor.imgdata.params.gamma_16bit = 0;    // Use 8-bit gamma
-          processor.imgdata.params.no_auto_bright = 1; // Disable auto brightness
-          processor.imgdata.params.user_qual = 0;     // High quality interpolation (AHD)
-          processor.imgdata.params.four_color_rgb = 0; // Use 3-color RGB
-          processor.imgdata.params.highlight = 0;     // Clip highlights
-          processor.imgdata.params.use_fuji_rotate = 1; // Handle Fuji rotation
-
-          // Process the RAW data
-          const processResult = processor.dcraw_process();
-          if (processResult !== 0) {
-            throw new Error(`LibRaw processing failed for ${file.name} (error code: ${processResult})`);
+          // Get the decoded image data (RGB pixels)
+          const imageData = await processor.imageData();
+          
+          if (!imageData || !imageData.length) {
+            throw new Error(`Failed to decode RAW file ${file.name}`);
           }
 
-          // Get the processed image data
-          const imageData = processor.dcraw_make_mem_image();
-          if (!imageData) {
-            throw new Error(`Failed to generate image data for ${file.name}`);
+          // Get metadata to determine image dimensions
+          const metadata = await processor.metadata();
+          if (!metadata || !metadata.width || !metadata.height) {
+            throw new Error(`Failed to get metadata for ${file.name}`);
           }
 
           updateProgress('converting', 55 + (i * 60 / rawFiles.length), `Creating ${outputFormat.toUpperCase()} from ${file.name}...`);
@@ -184,17 +180,17 @@ export function useClientRAWProcessor() {
           }
 
           // Set canvas dimensions
-          canvas.width = imageData.width;
-          canvas.height = imageData.height;
+          canvas.width = metadata.width;
+          canvas.height = metadata.height;
 
           // Create ImageData from LibRaw processed data
-          const canvasImageData = ctx.createImageData(imageData.width, imageData.height);
+          const canvasImageData = ctx.createImageData(metadata.width, metadata.height);
           
-          // LibRaw returns RGB data, convert to RGBA for canvas
-          const rgbData = imageData.data;
+          // LibRaw returns RGB data as Uint8Array, convert to RGBA for canvas
+          const rgbData = imageData;
           const rgbaData = canvasImageData.data;
           
-          for (let pixel = 0; pixel < imageData.width * imageData.height; pixel++) {
+          for (let pixel = 0; pixel < metadata.width * metadata.height; pixel++) {
             const rgbIndex = pixel * 3;
             const rgbaIndex = pixel * 4;
             
@@ -206,9 +202,6 @@ export function useClientRAWProcessor() {
 
           // Put image data on canvas
           ctx.putImageData(canvasImageData, 0, 0);
-
-          // Clean up LibRaw processor
-          processor.recycle();
 
           updateProgress('compressing', 70 + (i * 60 / rawFiles.length), `Compressing ${file.name} as ${outputFormat.toUpperCase()}...`);
 

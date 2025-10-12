@@ -1,36 +1,38 @@
 // Type declarations for libraw-wasm
 declare module 'libraw-wasm' {
-  export interface LibRawImageData {
-    data: Uint8Array;
+  export interface LibRawMetadata {
     width: number;
     height: number;
-    colors: number;
+    iso_speed: number;
+    shutter: number;
+    aperture: number;
+    focal_len: number;
+    timestamp: Date;
+    desc: string;
+    artist: string;
+    thumb_format?: string;
+    [key: string]: any;
   }
 
-  export interface LibRawParams {
-    use_camera_wb: number;
-    use_auto_wb: number;
-    output_color: number;
-    gamma_16bit: number;
-    no_auto_bright: number;
-    user_qual: number;
-    four_color_rgb: number;
-    highlight: number;
-    use_fuji_rotate: number;
-  }
-
-  export interface LibRawImgData {
-    params: LibRawParams;
+  export interface LibRawSettings {
+    bright?: number;           // brightness (default: 1.0)
+    threshold?: number;        // wavelet denoise threshold (default: 0.0)
+    autoBrightThr?: number;    // portion of clipped pixels for auto-brightening (default: 0.01)
+    adjustMaximumThr?: number; // auto-adjust max if channel overflow above threshold (default: 0.75)
+    expShift?: number;         // exposure shift in linear scale (default: 1.0)
+    expPreser?: number;        // preserve highlights when expShift>1 (default: 0.0)
+    halfSize?: boolean;        // output at 1/2 size (default: false)
+    fourColorRgb?: boolean;    // separate interpolation for two green channels (default: false)
+    highlight?: number;        // highlight mode 0..9 (default: 0)
+    useAutoWb?: boolean;       // auto white balance (default: false)
+    useCameraWb?: boolean;     // camera's recorded WB (default: false)
   }
 
   export class LibRaw {
     constructor();
-    imgdata: LibRawImgData;
-    open_buffer(buffer: Uint8Array): number;
-    unpack(): number;
-    dcraw_process(): number;
-    dcraw_make_mem_image(): LibRawImageData | null;
-    recycle(): void;
+    open(buffer: Uint8Array, settings?: LibRawSettings): Promise<void>;
+    metadata(fullOutput?: boolean): Promise<LibRawMetadata>;
+    imageData(): Promise<Uint8Array>;
   }
 
   export default LibRaw;
