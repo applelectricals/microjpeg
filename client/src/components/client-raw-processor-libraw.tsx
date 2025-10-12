@@ -137,37 +137,78 @@ export function useClientRAWProcessor() {
           // Initialize LibRaw processor
           const processor = new LibRaw.default();
           
-          // LibRaw settings for high quality processing
+          // Start with minimal settings for compatibility
           const settings = {
-            bright: 1.0,
-            threshold: 0.0,
-            autoBrightThr: 0.01,
-            adjustMaximumThr: 0.75,
-            expShift: 1.0,
-            expPreser: 0.0,
-            halfSize: false,
-            fourColorRgb: false,
-            highlight: 0,
-            useAutoWb: false,
-            useCameraWb: true  // Use camera white balance
+            halfSize: false,        // Full resolution
+            useCameraWb: true,      // Use camera white balance
+            outputColor: 1,         // sRGB colorspace
+            outputBps: 8,           // 8 bits per sample
+            userQual: 3,            // interpolation quality (0-12)
+            highlight: 0,           // clip highlights
+            bright: 1.0,            // brightness
+            noAutoBright: false     // allow auto brightness
           };
 
-          // Open the RAW file with settings
-          await processor.open(uint8Array, settings);
+          console.log(`🔧 Processing ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)`);
+
+          // Open the RAW file with minimal settings first
+          try {
+            await processor.open(uint8Array, settings);
+            console.log(`✅ Successfully opened ${file.name}`);
+          } catch (openError) {
+            console.error(`❌ Failed to open ${file.name}:`, openError);
+            // Try with no settings as fallback
+            try {
+              await processor.open(uint8Array);
+              console.log(`✅ Successfully opened ${file.name} with default settings`);
+            } catch (fallbackError) {
+              console.error(`❌ Failed to open ${file.name} even with default settings:`, fallbackError);
+              throw new Error(`Failed to open RAW file ${file.name}. This file format may not be supported or the file may be corrupted.`);
+            }
+          }
 
           updateProgress('converting', 40 + (i * 60 / rawFiles.length), `Converting ${file.name} to RGB...`);
 
-          // Get the decoded image data (RGB pixels)
-          const imageData = await processor.imageData();
-          
-          if (!imageData || !imageData.length) {
-            throw new Error(`Failed to decode RAW file ${file.name}`);
+          // Get metadata first to check if file was processed correctly
+          let metadata;
+          try {
+            metadata = await processor.metadata();
+            console.log(`📊 Metadata for ${file.name}:`, {
+              width: metadata?.width,
+              height: metadata?.height,
+              iso: metadata?.iso_speed,
+              desc: metadata?.desc
+            });
+          } catch (metadataError) {
+            console.error(`❌ Failed to get metadata for ${file.name}:`, metadataError);
+            throw new Error(`Failed to get metadata for ${file.name}: ${metadataError instanceof Error ? metadataError.message : 'Unknown error'}`);
           }
 
-          // Get metadata to determine image dimensions
-          const metadata = await processor.metadata();
           if (!metadata || !metadata.width || !metadata.height) {
-            throw new Error(`Failed to get metadata for ${file.name}`);
+            throw new Error(`Invalid metadata for ${file.name}: width=${metadata?.width}, height=${metadata?.height}`);
+          }
+
+          // Get the decoded image data (RGB pixels)
+          let imageData;
+          try {
+            imageData = await processor.imageData();
+            console.log(`🎨 Image data for ${file.name}:`, {
+              length: imageData?.length,
+              expectedLength: metadata.width * metadata.height * 3,
+              type: typeof imageData
+            });
+          } catch (imageDataError) {
+            console.error(`❌ Failed to get image data for ${file.name}:`, imageDataError);
+            throw new Error(`Failed to decode image data for ${file.name}: ${imageDataError instanceof Error ? imageDataError.message : 'Unknown error'}`);
+          }
+          
+          if (!imageData || !imageData.length) {
+            throw new Error(`No image data returned for ${file.name} (length: ${imageData?.length || 0})`);
+          }
+
+          const expectedDataLength = metadata.width * metadata.height * 3; // RGB = 3 bytes per pixel
+          if (imageData.length !== expectedDataLength) {
+            console.warn(`⚠️ Image data length mismatch for ${file.name}: got ${imageData.length}, expected ${expectedDataLength}`);
           }
 
           updateProgress('converting', 55 + (i * 60 / rawFiles.length), `Creating ${outputFormat.toUpperCase()} from ${file.name}...`);

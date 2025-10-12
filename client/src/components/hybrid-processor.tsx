@@ -2,7 +2,7 @@
 // Implements the Picflow.com strategy of client-side RAW processing only
 
 import { useState, useCallback } from 'react';
-import { useClientRAWProcessor } from './client-raw-processor-libraw';
+import { useClientRAWProcessor } from './client-raw-processor-vips';
 
 interface ProcessingResult {
   id: string;
