@@ -15,8 +15,8 @@ COPY . .
 # Run the exact same build command as Replit
 RUN npm run build
 
-# Remove node_modules and reinstall only production dependencies
-RUN rm -rf node_modules && npm ci --production
+# Install production dependencies fresh after build
+RUN rm -rf node_modules package-lock.json && npm install --production
 
 # Expose port
 EXPOSE 3000
