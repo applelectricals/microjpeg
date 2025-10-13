@@ -1,7 +1,12 @@
+import "./polyfill";
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
 import { TestPremiumExpiryManager } from "./testPremiumExpiry";
+import { initializeQueueService, shutdownQueueService } from "./queueService";
+import { seedSuperuser } from "./superuser";
+
+// Simple log function
+const log = console.log;
 import { initializeQueueService, shutdownQueueService } from "./queueService";
 import { seedSuperuser } from "./superuser";
 
@@ -112,8 +117,10 @@ app.use((req, res, next) => {
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
   if (app.get("env") === "development") {
+    const { setupVite } = await import("./viteDev");
     await setupVite(app, server);
   } else {
+    const { serveStatic } = await import("./viteStatic");
     serveStatic(app);
   }
 

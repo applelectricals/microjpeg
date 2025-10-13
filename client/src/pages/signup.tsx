@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Eye, EyeOff, Loader2, UserPlus, Check, X, Mail, User, Zap } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
-import logoPath from "@assets/mascot_1758657553459.webp";
+import logoPath from "@assets/mascot.webp";
 
 export default function Signup() {
   const [, setLocation] = useLocation();
