@@ -21,7 +21,7 @@ import jpegIcon from '@/assets/format-icons/jpeg.jpg';
 import pngIcon from '@/assets/format-icons/png.jpg';
 import webpIcon from '@/assets/format-icons/webp.jpg';
 // Critical images only (loaded immediately)
-import logoUrl from '@assets/mascot-logo-optimized.png';
+import logoUrl from '@assets/logo.png';
 import mascotUrl from '@/assets/mascot.webp';
 import freeSignedBg from '@/assets/background.webp';
 import owlMascot01 from '@assets/owl-mascot-01.webp';

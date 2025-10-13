@@ -37,34 +37,16 @@ __export(schema_exports, {
   userUsage: () => userUsage,
   users: () => users
 });
-import { pgTable, serial, varchar, integer, timestamp, decimal, boolean, jsonb, text } from "drizzle-orm/pg-core";
-import { z } from "zod";
-var loginSchema, signupSchema, users, sessions, apiKeys, uploads, compressionJobs, leadMagnetSignups, conversions, fileProcessing, pageUsage, rewardTransactions, socialShares, userReferrals, userRewards, adminAuditLogs, appSettings, operationLog2, userUsage, paymentTransactions, apiUsage, apiCompressRequestSchema, createApiKeySchema, anonymousSessionScopes, specialFormatTrials;
+import { pgTable, serial, varchar, integer, timestamp, decimal } from "drizzle-orm/pg-core";
+var users, sessions, apiKeys, uploads, compressionJobs, leadMagnetSignups, conversions, fileProcessing, pageUsage, rewardTransactions, socialShares, userReferrals, userRewards, adminAuditLogs, appSettings, operationLog2, userUsage, paymentTransactions, apiUsage, apiCompressRequestSchema, createApiKeySchema, anonymousSessionScopes, loginSchema, signupSchema, specialFormatTrials;
 var init_schema = __esm({
   "shared/schema.ts"() {
     "use strict";
-    loginSchema = z.object({
-      email: z.string().email("Invalid email address"),
-      password: z.string().min(6, "Password must be at least 6 characters")
-    });
-    signupSchema = z.object({
-      email: z.string().email("Invalid email address"),
-      password: z.string().min(6, "Password must be at least 6 characters"),
-      firstName: z.string().min(1, "First name is required"),
-      lastName: z.string().min(1, "Last name is required")
-    });
     users = pgTable("users", {
       id: serial("id").primaryKey(),
-      email: varchar("email", { length: 255 }).notNull().unique(),
-      password: varchar("password", { length: 255 }).notNull(),
-      firstName: varchar("first_name", { length: 255 }),
-      lastName: varchar("last_name", { length: 255 }),
-      subscriptionTier: varchar("subscription_tier", { length: 50 }).default("free"),
-      lastLogin: timestamp("last_login"),
-      emailVerified: boolean("email_verified").default(false),
-      emailVerificationToken: varchar("email_verification_token", { length: 255 }),
-      createdAt: timestamp("created_at").defaultNow(),
-      updatedAt: timestamp("updated_at").defaultNow()
+      email: varchar("email", { length: 255 }),
+      password: varchar("password", { length: 255 }),
+      createdAt: timestamp("created_at").defaultNow()
     });
     sessions = pgTable("sessions", {
       id: serial("id").primaryKey(),
@@ -86,32 +68,10 @@ var init_schema = __esm({
       createdAt: timestamp("created_at").defaultNow()
     });
     compressionJobs = pgTable("compression_jobs", {
-      id: varchar("id", { length: 255 }).primaryKey(),
-      userId: varchar("user_id", { length: 255 }),
-      sessionId: varchar("session_id", { length: 255 }),
-      originalFilename: varchar("original_filename", { length: 255 }).notNull(),
-      originalPath: varchar("original_path", { length: 500 }),
-      compressedPath: varchar("compressed_path", { length: 500 }),
-      status: varchar("status", { length: 50 }).default("pending"),
-      errorMessage: text("error_message"),
-      fileSize: integer("file_size"),
-      compressedSize: integer("compressed_size"),
-      outputFormat: varchar("output_format", { length: 20 }),
-      quality: integer("quality"),
-      resizePercentage: integer("resize_percentage"),
-      webOptimization: varchar("web_optimization", { length: 50 }),
-      metadata: jsonb("metadata"),
-      compressionSettings: jsonb("compression_settings"),
-      createdAt: timestamp("created_at").defaultNow(),
-      updatedAt: timestamp("updated_at"),
-      compressionAlgorithm: varchar("compression_algorithm", { length: 50 }).default("standard"),
-      hasTransparency: boolean("has_transparency").default(false),
-      hasAnimation: boolean("has_animation").default(false),
-      isProgressive: boolean("is_progressive").default(false),
-      width: integer("width"),
-      height: integer("height"),
-      inputFormat: varchar("input_format", { length: 20 }),
-      processingTime: integer("processing_time")
+      id: serial("id").primaryKey(),
+      userId: integer("user_id"),
+      status: varchar("status", { length: 50 }),
+      createdAt: timestamp("created_at").defaultNow()
     });
     leadMagnetSignups = pgTable("lead_magnet_signups", {
       id: serial("id").primaryKey(),
@@ -188,41 +148,19 @@ var init_schema = __esm({
     });
     operationLog2 = pgTable("operation_Log", {
       id: serial("id").primaryKey(),
-      userId: varchar("user_id", { length: 255 }),
-      sessionId: varchar("session_id", { length: 255 }),
-      operationType: varchar("operation_type", { length: 50 }),
-      // 'regular' or 'raw'
-      fileFormat: varchar("file_format", { length: 20 }),
-      // e.g., 'jpg', 'cr2'
-      fileSizeMb: integer("file_size_mb"),
-      pageIdentifier: varchar("page_identifier", { length: 100 }),
-      wasBypassed: boolean("was_bypassed").default(false),
-      bypassReason: varchar("bypass_reason", { length: 255 }),
-      actedByAdminId: varchar("acted_by_admin_id", { length: 255 }),
+      referrerId: integer("referrer_id"),
+      referredId: integer("referred_id"),
+      code: varchar("code", { length: 100 }),
+      status: varchar("status", { length: 50 }),
       createdAt: timestamp("created_at").defaultNow()
     });
-    userUsage = pgTable("userUsage", {
+    userUsage = pgTable("user_Usage", {
       id: serial("id").primaryKey(),
-      userId: varchar("user_id", { length: 255 }),
-      // Can be 'anonymous' for guest users
-      sessionId: varchar("session_id", { length: 255 }),
-      // Regular image counters
-      regularHourly: integer("regular_hourly").default(0),
-      regularDaily: integer("regular_daily").default(0),
-      regularMonthly: integer("regular_monthly").default(0),
-      // RAW image counters  
-      rawHourly: integer("raw_hourly").default(0),
-      rawDaily: integer("raw_daily").default(0),
-      rawMonthly: integer("raw_monthly").default(0),
-      // Bandwidth tracking
-      monthlyBandwidthMb: integer("monthly_bandwidth_mb").default(0),
-      // Reset timestamps
-      hourlyResetAt: timestamp("hourly_reset_at").defaultNow(),
-      dailyResetAt: timestamp("daily_reset_at").defaultNow(),
-      monthlyResetAt: timestamp("monthly_reset_at").defaultNow(),
-      // Metadata
-      createdAt: timestamp("created_at").defaultNow(),
-      updatedAt: timestamp("updated_at").defaultNow()
+      referrerId: integer("referrer_id"),
+      referredId: integer("referred_id"),
+      code: varchar("code", { length: 100 }),
+      status: varchar("status", { length: 50 }),
+      createdAt: timestamp("created_at").defaultNow()
     });
     paymentTransactions = pgTable("payment_Transactions", {
       id: serial("id").primaryKey(),
@@ -264,13 +202,28 @@ var init_schema = __esm({
       status: varchar("status", { length: 50 }),
       createdAt: timestamp("created_at").defaultNow()
     });
+    loginSchema = pgTable("login_Schema", {
+      id: serial("id").primaryKey(),
+      referrerId: integer("referrer_id"),
+      referredId: integer("referred_id"),
+      code: varchar("code", { length: 100 }),
+      status: varchar("status", { length: 50 }),
+      createdAt: timestamp("created_at").defaultNow()
+    });
+    signupSchema = pgTable("signup_Schema", {
+      id: serial("id").primaryKey(),
+      referrerId: integer("referrer_id"),
+      referredId: integer("referred_id"),
+      code: varchar("code", { length: 100 }),
+      status: varchar("status", { length: 50 }),
+      createdAt: timestamp("created_at").defaultNow()
+    });
     specialFormatTrials = pgTable("special_FormatTrials", {
       id: serial("id").primaryKey(),
-      ipAddress: varchar("ip_address", { length: 255 }).notNull(),
-      userAgent: varchar("user_agent", { length: 500 }),
-      browserFingerprint: varchar("browser_fingerprint", { length: 255 }),
-      usageCount: integer("usage_count").default(0),
-      lastUsed: timestamp("last_used").defaultNow(),
+      referrerId: integer("referrer_id"),
+      referredId: integer("referred_id"),
+      code: varchar("code", { length: 100 }),
+      status: varchar("status", { length: 50 }),
       createdAt: timestamp("created_at").defaultNow()
     });
   }
@@ -3394,12 +3347,6 @@ var init_userLimits = __esm({
     };
   }
 });
-
-// server/polyfill.ts
-import { fileURLToPath } from "url";
-import { dirname } from "path";
-global.__dirname = dirname(fileURLToPath(import.meta.url));
-global.__filename = fileURLToPath(import.meta.url);
 
 // server/index.ts
 import express3 from "express";
@@ -10537,7 +10484,7 @@ import { Router as Router4 } from "express";
 init_schema();
 init_db();
 init_schema();
-import { z as z2 } from "zod";
+import { z } from "zod";
 import { eq as eq8, and as and5 } from "drizzle-orm";
 var router4 = Router4();
 router4.get("/keys", isAuthenticated2, async (req, res) => {
@@ -10628,11 +10575,11 @@ router4.put("/keys/:keyId", isAuthenticated2, async (req, res) => {
   try {
     const userId2 = req.user.id;
     const keyId = req.params.keyId;
-    const updateSchema = z2.object({
-      name: z2.string().min(1).max(50).optional(),
-      permissions: z2.array(z2.enum(["compress", "convert", "batch", "webhook"])).optional(),
-      rateLimit: z2.number().min(100).max(1e4).optional(),
-      isActive: z2.boolean().optional()
+    const updateSchema = z.object({
+      name: z.string().min(1).max(50).optional(),
+      permissions: z.array(z.enum(["compress", "convert", "batch", "webhook"])).optional(),
+      rateLimit: z.number().min(100).max(1e4).optional(),
+      isActive: z.boolean().optional()
     });
     const parseResult = updateSchema.safeParse(req.body);
     if (!parseResult.success) {
@@ -15859,33 +15806,23 @@ import fs7 from "fs";
 import path8 from "path";
 import { createServer as createViteServer, createLogger } from "vite";
 
-// client/vite.config.ts
+// vite.config.ts
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path7 from "path";
 var vite_config_default = defineConfig({
-  plugins: [
-    react()
-  ],
+  root: "./client",
+  plugins: [react()],
+  build: {
+    outDir: "../dist",
+    emptyOutDir: true
+  },
   resolve: {
     alias: {
-      "@": path7.resolve(__dirname, "./src"),
-      "@assets": path7.resolve(__dirname, "./src/assets"),
-      "@shared": path7.resolve(__dirname, "../shared")
+      "@": path7.resolve(__dirname, "./client/src"),
+      "@assets": path7.resolve(__dirname, "./client/src/assets"),
+      "@shared": path7.resolve(__dirname, "./shared")
     }
-  },
-  server: {
-    port: 5173,
-    proxy: {
-      "/api": {
-        target: "http://localhost:5000",
-        changeOrigin: true,
-        secure: false
-      }
-    }
-  },
-  build: {
-    target: "esnext"
   }
 });
 

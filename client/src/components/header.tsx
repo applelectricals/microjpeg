@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Menu, X, Activity, Clock, Calendar, Image, Camera } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
-import logoUrl from '@assets/mascot-logo-optimized.png';
+import logoUrl from '@assets/logo.png';
 import { FORMATS } from '@/data/conversionMatrix';
 
 export default function Header() {

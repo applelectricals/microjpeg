@@ -6,10 +6,10 @@ import { useQuery } from "@tanstack/react-query";
 import type { CompressionJob } from "@shared/schema";
 import { formatFileSize } from "@/lib/file-utils";
 import QualityAssessment from "@/components/quality-assessment";
-import avifIcon from "@assets/AVIF_1756389520683.jpg";
-import jpegIcon from "@assets/JPEG_1756389520684.jpg";
-import pngIcon from "@assets/PNG_1756389520685.jpg";
-import webpIcon from "@assets/WEBP_1756389520685.jpg";
+import avifIcon from "@assets/format-icons/avif.jpg";
+import jpegIcon from "@assets/format-icons/jpeg.jpg";
+import pngIcon from "@assets/format-icons/png.jpg";
+import webpIcon from "@assets/format-icons/webp.jpg";
 
 interface FilePreviewCardProps {
   job: CompressionJob;
