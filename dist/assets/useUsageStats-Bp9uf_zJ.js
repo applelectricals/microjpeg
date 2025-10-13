@@ -1,1 +1,0 @@
-import{k as t,h as a}from"./index-BX489NwT.js";function u(s){const e=t();return console.log("🔧 useUsageStats Debug:",{pageIdentifier:e,queryKey:["/api/usage-stats",e]}),a({queryKey:["/api/usage-stats",e],enabled:!0,refetchInterval:1e4,staleTime:0})}export{u};

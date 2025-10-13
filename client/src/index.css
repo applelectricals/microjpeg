@@ -69,13 +69,16 @@
 
 @layer base {
   * {
-    @apply border-border;
+    border-color: hsl(var(--border));
   }
 
   body {
-    @apply antialiased bg-background text-foreground;
     font-family: var(--font-poppins);
     line-height: 1.6;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   /* Force mobile header layout with absolute positioning */
